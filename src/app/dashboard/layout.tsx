@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { useUser } from '@/context/UserContext';
 import {
   Home,
   LineChart,
@@ -36,6 +37,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { user, isAdmin, logout } = useUser();
+  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
@@ -70,13 +73,15 @@ export default function DashboardLayout({
                 Analytics
               </Link>
                
-                <Link
-                  href="/dashboard/admin"
-                  className="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2 text-primary transition-all hover:text-primary"
-                >
-                  <Shield className="h-4 w-4" />
-                  Admin Panel
-                </Link>
+                {isAdmin && (
+                    <Link
+                    href="/dashboard/admin"
+                    className="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2 text-primary transition-all hover:text-primary"
+                    >
+                    <Shield className="h-4 w-4" />
+                    Admin Panel
+                    </Link>
+                )}
             </nav>
           </div>
         </div>
@@ -123,13 +128,15 @@ export default function DashboardLayout({
                   <LineChart className="h-5 w-5" />
                   Analytics
                 </Link>
-                <Link
-                  href="/dashboard/admin"
-                  className="mx-[-0.65rem] flex items-center gap-4 rounded-xl bg-primary/10 px-3 py-2 text-primary hover:text-foreground"
-                >
-                  <Shield className="h-5 w-5" />
-                  Admin Panel
-                </Link>
+                {isAdmin && (
+                    <Link
+                        href="/dashboard/admin"
+                        className="mx-[-0.65rem] flex items-center gap-4 rounded-xl bg-primary/10 px-3 py-2 text-primary hover:text-foreground"
+                    >
+                        <Shield className="h-5 w-5" />
+                        Admin Panel
+                    </Link>
+                )}
               </nav>
             </SheetContent>
           </Sheet>
@@ -151,13 +158,13 @@ export default function DashboardLayout({
               <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar>
                   <AvatarImage src={"https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=U"} />
-                  <AvatarFallback>{'U'}</AvatarFallback>
+                  <AvatarFallback>{userInitial}</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Toggle user menu</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>{user?.email || 'My Account'}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
@@ -172,7 +179,7 @@ export default function DashboardLayout({
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild onClick={logout}>
                 <Link href="/">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Logout</span>

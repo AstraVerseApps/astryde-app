@@ -13,17 +13,27 @@ export default function AnalyticsPage() {
 
   const analyticsData = technologies.map(tech => {
     const techVideos: Video[] = tech.creators.flatMap(c => c.videos);
+    
     const completed = techVideos.filter(v => {
         const userVideo = videos.find(uv => uv.id === v.id);
         return userVideo?.status === 'Completed';
     }).length;
-    
-    const pending = techVideos.length - completed;
 
+    const inProgress = techVideos.filter(v => {
+        const userVideo = videos.find(uv => uv.id === v.id);
+        return userVideo?.status === 'In Progress';
+    }).length;
+
+    const notStarted = techVideos.filter(v => {
+        const userVideo = videos.find(uv => uv.id === v.id);
+        return userVideo?.status === 'Not Started';
+    }).length;
+    
     return {
       name: tech.name,
       completed: completed,
-      pending: pending,
+      inProgress: inProgress,
+      notStarted: notStarted,
     };
   });
 
@@ -36,7 +46,7 @@ export default function AnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Technology Progress</CardTitle>
-          <CardDescription>Breakdown of your completed and pending videos across technologies.</CardDescription>
+          <CardDescription>Breakdown of your video progress across different technologies.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[400px]">
@@ -56,8 +66,9 @@ export default function AnalyticsPage() {
                   formatter={(value, name, props) => [`${value} videos`, name]}
                 />
                 <Legend />
-                <Bar dataKey="completed" fill="#22c55e" name="Completed" stackId="a" radius={[4, 0, 0, 4]} />
-                <Bar dataKey="pending" fill="#f97316" name="Pending" stackId="a" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="completed" fill="#22c55e" name="Completed" stackId="a" />
+                <Bar dataKey="inProgress" fill="#facc15" name="In Progress" stackId="a" />
+                <Bar dataKey="notStarted" fill="#f97316" name="Not Started" stackId="a" />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -1,9 +1,13 @@
+import type { LucideIcon } from 'lucide-react';
+
 export type Video = {
   id: string;
   title: string;
   duration: string;
   thumbnail: string;
   status: 'Completed' | 'In Progress' | 'Not Started';
+  creator?: string;
+  technology?: string;
 };
 
 export type Creator = {
@@ -17,6 +21,6 @@ export type Technology = {
   id: string;
   name: string;
   description: string;
-  icon: (props: React.SVGProps<SVGSVGElement>) => JSX.Element;
+  icon: LucideIcon | ((props: React.SVGProps<SVGSVGElement>) => JSX.Element);
   creators: Creator[];
 };

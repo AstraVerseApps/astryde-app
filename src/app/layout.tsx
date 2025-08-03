@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { Toaster } from '@/components/ui/toaster';
-import { AuthProvider } from '@/hooks/use-auth';
+import DashboardLayout from '@/app/dashboard/layout';
+
 
 export const metadata: Metadata = {
   title: 'Astryde: Your Tech Learning Galaxy',
@@ -28,9 +29,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <DashboardLayout>{children}</DashboardLayout>
           <Toaster />
         </ThemeProvider>
       </body>

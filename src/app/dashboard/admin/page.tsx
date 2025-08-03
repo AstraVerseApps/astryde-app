@@ -1,8 +1,7 @@
+
 'use client';
 
-import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,23 +9,6 @@ import { Label } from '@/components/ui/label';
 import { PlusCircle, UploadCloud } from 'lucide-react';
 
 export default function AdminPage() {
-  const { isAdmin, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !isAdmin) {
-      router.push('/dashboard');
-    }
-  }, [isAdmin, loading, router]);
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (!isAdmin) {
-    return null;
-  }
-
   return (
     <>
       <div className="flex items-center">
@@ -108,3 +90,4 @@ export default function AdminPage() {
     </>
   );
 }
+

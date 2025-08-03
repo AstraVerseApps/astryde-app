@@ -1,98 +1,142 @@
 
 "use client";
 
-import { AstrydeLogo } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from 'next/navigation';
+import { technologies, allVideos } from "@/lib/data";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from 'next/image';
-import { useState, FormEvent } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { Circle, CheckCircle2, PlayCircle, Clock } from 'lucide-react';
+import React, { useState, useMemo } from "react";
+import type { Video } from "@/types";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { AiSuggestions } from "@/components/ai-suggestions";
 
+const statusIcons: Record<Video['status'], React.ReactNode> = {
+  'Not Started': <Circle className="h-4 w-4 text-muted-foreground" />,
+  'In Progress': <PlayCircle className="h-4 w-4 text-yellow-400" />,
+  'Completed': <CheckCircle2 className="h-4 w-4 text-green-500" />,
+};
 
-export default function LoginPage() {
-  const router = useRouter();
-  const { user, signUp, signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const { toast } = useToast();
+export default function DashboardPage() {
+  const [videos, setVideos] = useState<Video[]>(allVideos);
 
-  const handleSignUp = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await signUp(email, password);
-      router.push('/dashboard');
-    } catch (error: any) {
-        toast({
-            title: "Sign Up Error",
-            description: error.message,
-            variant: "destructive",
-        })
-    }
+  const handleStatusChange = (videoId: string, status: Video['status']) => {
+    setVideos(currentVideos =>
+      currentVideos.map(video =>
+        video.id === videoId ? { ...video, status } : video
+      )
+    );
   };
 
-  const handleSignIn = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await signIn(email, password);
-      router.push('/dashboard');
-    } catch (error: any) {
-       toast({
-            title: "Sign In Error",
-            description: error.message,
-            variant: "destructive",
-        })
-    }
-  };
-  
-  if (user) {
-    router.push('/dashboard');
-    return null;
-  }
+  const completedCourses = useMemo(() => videos.filter(v => v.status === 'Completed').map(v => v.id), [videos]);
+  const subjectsOfInterest = useMemo(() => {
+    const interestedVideoIds = videos
+      .filter(v => v.status === 'Completed' || v.status === 'In Progress')
+      .map(v => v.id);
+    const subjects = new Set<string>();
+    technologies.forEach(tech => {
+      tech.creators.forEach(creator => {
+        creator.videos.forEach(video => {
+          if (interestedVideoIds.includes(video.id)) {
+            subjects.add(tech.name);
+          }
+        });
+      });
+    });
+    return Array.from(subjects);
+  }, [videos]);
+
+  const getVideoById = (id: string) => videos.find(v => v.id === id);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <div className="absolute top-4 left-4">
-            <AstrydeLogo />
-        </div>
-      <div className="grid lg:grid-cols-2 gap-16 items-center max-w-6xl w-full">
-        <div className="hidden lg:flex flex-col items-center justify-center">
-            <Image src="https://placehold.co/600x400/BFDBFE/1E3A8A" width={600} height={400} alt="Astryde App illustration" className="rounded-lg shadow-2xl" data-ai-hint="space technology" />
-            <div className="mt-8 text-center">
-                <h2 className="text-3xl font-bold font-headline">Explore a Galaxy of Knowledge</h2>
-                <p className="mt-4 text-muted-foreground max-w-md">Astryde is your personal launchpad to mastering new technologies. Track your progress, get AI-powered suggestions, and join a community of learners.</p>
-            </div>
-        </div>
-        <Card className="w-full max-w-md mx-auto">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-headline">Welcome, Voyager</CardTitle>
-            <CardDescription>Sign in or create an account to begin your journey.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form className="space-y-4">
-                 <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" placeholder="voyager@astryde.dev" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </div>
-                 <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                </div>
-                <div className="flex gap-2">
-                    <Button onClick={handleSignIn} className="w-full">Sign In</Button>
-                    <Button onClick={handleSignUp} variant="secondary" className="w-full">Sign Up</Button>
-                </div>
-            </form>
-          </CardContent>
-           <CardFooter className="text-center text-xs text-muted-foreground flex-col">
-              By continuing, you agree to our Terms of Service.
-              <a href="#" className="underline ml-1">Learn more.</a>
-          </CardFooter>
-        </Card>
+    <>
+      <div className="flex items-center">
+        <h1 className="text-lg font-semibold md:text-2xl font-headline">Cosmic Dashboard</h1>
       </div>
-    </div>
+      <Tabs defaultValue="learning-path" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="learning-path">Learning Path</TabsTrigger>
+          <TabsTrigger value="ai-suggestions">AI Suggestions</TabsTrigger>
+        </TabsList>
+        <TabsContent value="learning-path">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Learning Galaxy</CardTitle>
+              <CardDescription>Explore technologies, creators, and videos to expand your universe of knowledge.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Accordion type="single" collapsible className="w-full">
+                {technologies.map((tech) => (
+                  <AccordionItem value={tech.id} key={tech.id}>
+                    <AccordionTrigger className="text-lg font-medium hover:no-underline">
+                      <div className="flex items-center gap-3">
+                        <tech.icon className="h-6 w-6 text-primary icon-glow" />
+                        {tech.name}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pl-4">
+                      {tech.creators.map((creator) => (
+                        <div key={creator.id} className="mt-4">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Avatar>
+                              <AvatarImage src={creator.avatar} />
+                              <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <h4 className="font-semibold">{creator.name}</h4>
+                          </div>
+                          <div className="border-l-2 border-primary/20 pl-6 ml-5">
+                            {creator.videos.map((video) => {
+                                const videoState = getVideoById(video.id);
+                                return (
+                                  <div key={video.id} className="flex items-center justify-between py-3 group">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-32 h-18 bg-muted rounded-md overflow-hidden shrink-0">
+                                         <Image data-ai-hint="code technology" src={video.thumbnail} alt={video.title} width={128} height={72} className="object-cover w-full h-full"/>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">{video.title}</p>
+                                        <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="hidden md:block">
+                                            {statusIcons[videoState?.status ?? 'Not Started']}
+                                        </div>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="sm">Set Status</Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent>
+                                                <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                  </div>
+                                );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="ai-suggestions">
+            <AiSuggestions
+                completedCourses={completedCourses}
+                subjectsOfInterest={subjectsOfInterest}
+                allVideos={videos}
+             />
+        </TabsContent>
+      </Tabs>
+    </>
   );
 }

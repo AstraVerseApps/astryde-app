@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useAuth, AuthProvider } from '@/hooks/use-auth';
 import {
   Home,
   LineChart,
@@ -31,35 +30,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
-function DashboardLayoutContent({
+
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, isAdmin, signOut } = useAuth();
-  const router = useRouter();
-
-  React.useEffect(() => {
-    if (!loading && !user) {
-      router.push('/');
-    }
-  }, [user, loading, router]);
-
-  const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
-  }
-
-  if (loading || !user) {
-    return (
-        <div className="flex h-screen items-center justify-center">
-            <div className="flex flex-col items-center gap-4">
-                <AstrydeLogo />
-                <p>Loading your cosmic dashboard...</p>
-            </div>
-        </div>
-    );
-  }
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
@@ -93,7 +69,7 @@ function DashboardLayoutContent({
                 <LineChart className="h-4 w-4" />
                 Analytics
               </Link>
-               {isAdmin && (
+               
                 <Link
                   href="/dashboard/admin"
                   className="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2 text-primary transition-all hover:text-primary"
@@ -101,7 +77,6 @@ function DashboardLayoutContent({
                   <Shield className="h-4 w-4" />
                   Admin Panel
                 </Link>
-              )}
             </nav>
           </div>
         </div>
@@ -148,15 +123,13 @@ function DashboardLayoutContent({
                   <LineChart className="h-5 w-5" />
                   Analytics
                 </Link>
-                 {isAdmin && (
-                  <Link
-                    href="/dashboard/admin"
-                    className="mx-[-0.65rem] flex items-center gap-4 rounded-xl bg-primary/10 px-3 py-2 text-primary hover:text-foreground"
-                  >
-                    <Shield className="h-5 w-5" />
-                    Admin Panel
-                  </Link>
-              )}
+                <Link
+                  href="/dashboard/admin"
+                  className="mx-[-0.65rem] flex items-center gap-4 rounded-xl bg-primary/10 px-3 py-2 text-primary hover:text-foreground"
+                >
+                  <Shield className="h-5 w-5" />
+                  Admin Panel
+                </Link>
               </nav>
             </SheetContent>
           </Sheet>
@@ -177,8 +150,8 @@ function DashboardLayoutContent({
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar>
-                  <AvatarImage src={user.photoURL ?? "https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=U"} />
-                  <AvatarFallback>{user.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
+                  <AvatarImage src={"https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=U"} />
+                  <AvatarFallback>{'U'}</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Toggle user menu</span>
               </Button>
@@ -199,7 +172,7 @@ function DashboardLayoutContent({
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
+              <DropdownMenuItem>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Logout</span>
               </DropdownMenuItem>
@@ -214,14 +187,3 @@ function DashboardLayoutContent({
   );
 }
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-    return (
-        <AuthProvider>
-            <DashboardLayoutContent>{children}</DashboardLayoutContent>
-        </AuthProvider>
-    )
-}

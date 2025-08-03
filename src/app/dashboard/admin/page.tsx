@@ -11,9 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useUser } from '@/context/UserContext';
+import { useRouter } from 'next/navigation';
 
 export default function AdminPage() {
   const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo } = useUser();
+  const router = useRouter();
 
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
   const [videosForCreator, setVideosForCreator] = React.useState<Video[]>([]);
@@ -58,6 +60,7 @@ export default function AdminPage() {
         setSelectedVideoForDelete('');
     }
     setDeleteType('');
+    router.refresh();
   };
   
 

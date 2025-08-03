@@ -92,10 +92,17 @@ export default function AdminPage() {
         await deleteTechnology(selectedTechForDelete);
         setSelectedTechForDelete('');
     } else if (deleteType === 'creator' && selectedCreatorForDelete) {
-        await deleteCreator(selectedTechForDelete, selectedCreatorForDelete);
+        const techIdForCreator = technologies.find(t => t.creators.some(c => c.id === selectedCreatorForDelete))?.id;
+        if(techIdForCreator) {
+          await deleteCreator(techIdForCreator, selectedCreatorForDelete);
+        }
         setSelectedCreatorForDelete('');
     } else if (deleteType === 'video' && selectedVideoForDelete) {
-        await deleteVideo(selectedTechForDelete, selectedCreatorForDelete, selectedVideoForDelete);
+        const techIdForVideo = technologies.find(t => t.creators.some(c => c.videos.some(v => v.id === selectedVideoForDelete)))?.id;
+        const creatorIdForVideo = technologies.flatMap(t => t.creators).find(c => c.videos.some(v => v.id === selectedVideoForDelete))?.id;
+        if (techIdForVideo && creatorIdForVideo) {
+          await deleteVideo(techIdForVideo, creatorIdForVideo, selectedVideoForDelete);
+        }
         setSelectedVideoForDelete('');
     }
     setDeleteType('');

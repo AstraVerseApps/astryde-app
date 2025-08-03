@@ -5,8 +5,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import type { Video, Technology, Creator } from '@/types';
 import { technologies as initialTechnologies } from '@/lib/data';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, writeBatch, deleteDoc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
 
 const iconMap: Record<string, React.ElementType> = {
   AppWindow,
@@ -16,8 +15,22 @@ const iconMap: Record<string, React.ElementType> = {
 };
 
 const getIconComponent = (iconName?: string) => {
-    if (!iconName) return BrainCircuit;
-    return iconMap[iconName] || BrainCircuit;
+    if (!iconName || !iconMap[iconName]) return BrainCircuit;
+    return iconMap[iconName];
+};
+
+const processInitialData = (technologies: Technology[]): Technology[] => {
+    return technologies.map(tech => ({
+        ...tech,
+        icon: getIconComponent((tech.icon as any).displayName),
+        creators: tech.creators.map(creator => ({
+            ...creator,
+            videos: creator.videos.map(video => ({
+                ...video,
+                status: 'Not Started' 
+            }))
+        }))
+    }));
 };
 
 interface UserContextType {
@@ -42,124 +55,41 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<{ email: string; displayName: string; photoURL?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [technologies, setTechnologies] = useState<Technology[]>(() => processInitialData(initialTechnologies));
   const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    setLoading(true);
+    try {
+        const storedUser = localStorage.getItem('astryde-user');
+        const storedTech = localStorage.getItem('astryde-tech-data');
 
-  const seedDatabase = useCallback(async () => {
-    console.log("Seeding database...");
-    const batch = writeBatch(db);
-    initialTechnologies.forEach(tech => {
-        const techDocRef = doc(db, "technologies", tech.id);
-        const { creators, icon, ...techData } = tech;
-        const iconName = (icon as any).displayName || 'BrainCircuit';
-        batch.set(techDocRef, { name: techData.name, description: techData.description, id: techData.id, iconName });
+        if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            setIsAdmin(parsedUser.email === 'astrydeapp@gmail.com');
+        }
 
-        tech.creators.forEach(creator => {
-            const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
-            const { videos, ...creatorData } = creator;
-            batch.set(creatorDocRef, creatorData);
-
-            creator.videos.forEach(video => {
-                const videoDocRef = doc(db, `technologies/${tech.id}/creators/${creator.id}/videos`, video.id);
-                batch.set(videoDocRef, video);
-            });
-        });
-    });
-    await batch.commit();
-    console.log("Database seeded.");
+        if (storedTech) {
+            const parsedTech = JSON.parse(storedTech);
+            setTechnologies(processInitialData(parsedTech));
+        } else {
+            const initialData = processInitialData(initialTechnologies);
+            setTechnologies(initialData);
+            localStorage.setItem('astryde-tech-data', JSON.stringify(initialData.map(t => ({...t, icon: (t.icon as any).displayName}))));
+        }
+    } catch (e) {
+        console.error("Error loading data from local storage", e);
+        const initialData = processInitialData(initialTechnologies);
+        setTechnologies(initialData);
+    } finally {
+        setLoading(false);
+    }
   }, []);
 
-  const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null): Promise<Technology[]> => {
-    const techList: Technology[] = [];
-    for (const techDoc of techSnapshot.docs) {
-        const techData = techDoc.data();
-        const tech: Technology = {
-            id: techDoc.id,
-            name: techData.name,
-            description: techData.description,
-            icon: getIconComponent(techData.iconName),
-            creators: [],
-        };
-
-        const creatorsCollection = collection(db, `technologies/${tech.id}/creators`);
-        const creatorsSnapshot = await getDocs(creatorsCollection);
-        const userProgress = userEmail ? (await getDoc(doc(db, `users/${userEmail}`))).data()?.progress || {} : {};
-
-        for (const creatorDoc of creatorsSnapshot.docs) {
-            const creatorData = creatorDoc.data();
-            const creator: Creator = {
-                id: creatorDoc.id,
-                name: creatorData.name,
-                avatar: creatorData.avatar,
-                videos: [],
-            };
-
-            const videosCollection = collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`);
-            const videosSnapshot = await getDocs(videosCollection);
-            
-            for (const videoDoc of videosSnapshot.docs) {
-                const videoData = videoDoc.data();
-                const video: Video = {
-                    id: videoDoc.id,
-                    title: videoData.title,
-                    duration: videoData.duration,
-                    thumbnail: videoData.thumbnail,
-                    url: videoData.url,
-                    status: userProgress[videoDoc.id] || 'Not Started',
-                };
-                creator.videos.push(video);
-            }
-            tech.creators.push(creator);
-        }
-        techList.push(tech);
-    }
-    return techList;
-  }
-
-  const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
-    try {
-        const techCollection = collection(db, 'technologies');
-        const techSnapshot = await getDocs(techCollection);
-
-        let fetchedTechnologies: Technology[];
-
-        if (techSnapshot.empty) {
-            await seedDatabase();
-            const newTechSnapshot = await getDocs(techCollection);
-            fetchedTechnologies = await processTechSnapshot(newTechSnapshot, userEmail);
-        } else {
-            fetchedTechnologies = await processTechSnapshot(techSnapshot, userEmail);
-        }
-        setTechnologies(fetchedTechnologies);
-    } catch(e) {
-        console.error("Error fetching technologies:", e);
-    }
-  }, [seedDatabase]);
-
-
-  useEffect(() => {
-    const initialize = async () => {
-        setLoading(true);
-        try {
-            const storedUser = localStorage.getItem('astryde-user');
-            if (storedUser) {
-                const parsedUser = JSON.parse(storedUser);
-                setUser(parsedUser);
-                setIsAdmin(parsedUser.email === 'astrydeapp@gmail.com');
-                await fetchTechnologies(parsedUser.email);
-            } else {
-                await fetchTechnologies(null);
-            }
-        } catch (error) {
-            console.error("Initialization failed:", error);
-            // Even if it fails, stop loading to not get stuck
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    initialize();
-  }, [fetchTechnologies]);
+  const updateLocalStorage = (newTechs: Technology[]) => {
+      localStorage.setItem('astryde-tech-data', JSON.stringify(newTechs.map(t => ({...t, icon: (t.icon as any).displayName || 'BrainCircuit'}))));
+  };
 
   const login = (email: string) => {
     const newUser = {
@@ -170,22 +100,16 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('astryde-user', JSON.stringify(newUser));
     setUser(newUser);
     setIsAdmin(newUser.email === 'astrydeapp@gmail.com');
-    setLoading(true);
-    fetchTechnologies(newUser.email).finally(() => setLoading(false));
-  }
+  };
 
-  const logout = async () => {
+  const logout = () => {
     localStorage.removeItem('astryde-user');
     setUser(null);
     setIsAdmin(false);
-    setLoading(true);
-    fetchTechnologies(null).finally(() => setLoading(false));
   };
   
   const updateVideoStatus = async (videoId: string, status: Video['status']) => {
-    if (!user || !user.email) return;
-
-    setTechnologies(prevTechs => prevTechs.map(tech => ({
+    const newTechs = technologies.map(tech => ({
       ...tech,
       creators: tech.creators.map(creator => ({
         ...creator,
@@ -193,76 +117,97 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           video.id === videoId ? { ...video, status } : video
         )
       }))
-    })));
-
-    const userRef = doc(db, `users/${user.email}`);
-    try {
-        await updateDoc(userRef, {
-            [`progress.${videoId}`]: status
-        });
-    } catch (e) {
-        await setDoc(userRef, { progress: { [videoId]: status } }, { merge: true });
-    }
+    }));
+    setTechnologies(newTechs);
+    updateLocalStorage(newTechs);
   };
 
   const addTechnology = async (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & {iconName: string}) => {
-    const id = `tech-${Date.now()}`;
-    const { iconName, ...rest } = tech;
-    const newTechnology = {
-        ...rest,
-        id,
-        iconName,
+    const newTechnology: Technology = {
+        ...tech,
+        id: `tech-${Date.now()}`,
+        creators: [],
+        icon: getIconComponent(tech.iconName),
     };
-    await setDoc(doc(db, "technologies", id), {name: newTechnology.name, description: newTechnology.description, iconName: newTechnology.iconName});
-    await fetchTechnologies(user?.email);
+    const newTechs = [...technologies, newTechnology];
+    setTechnologies(newTechs);
+    updateLocalStorage(newTechs);
   };
 
   const addCreator = async (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => {
-      const id = `creator-${Date.now()}`;
-      await setDoc(doc(db, `technologies/${techId}/creators`, id), creator);
-      await fetchTechnologies(user?.email);
+      const newCreator: Creator = {
+          ...creator,
+          id: `creator-${Date.now()}`,
+          videos: []
+      };
+      const newTechs = technologies.map(tech => {
+          if (tech.id === techId) {
+              return { ...tech, creators: [...tech.creators, newCreator]};
+          }
+          return tech;
+      });
+      setTechnologies(newTechs);
+      updateLocalStorage(newTechs);
   };
 
   const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
-      const id = `video-${Date.now()}`;
-      await setDoc(doc(db, `technologies/${techId}/creators/${creatorId}/videos`, id), { ...video, status: 'Not Started' });
-      await fetchTechnologies(user?.email);
+      const newVideo: Video = {
+          ...video,
+          id: `video-${Date.now()}`,
+          status: 'Not Started',
+      };
+      const newTechs = technologies.map(tech => {
+          if (tech.id === techId) {
+              return {
+                  ...tech,
+                  creators: tech.creators.map(creator => {
+                      if (creator.id === creatorId) {
+                          return { ...creator, videos: [...creator.videos, newVideo] };
+                      }
+                      return creator;
+                  })
+              }
+          }
+          return tech;
+      });
+      setTechnologies(newTechs);
+      updateLocalStorage(newTechs);
   };
 
   const deleteTechnology = async (techId: string) => {
-    const techRef = doc(db, "technologies", techId);
-    
-    const creatorsSnapshot = await getDocs(collection(techRef, "creators"));
-    const batch = writeBatch(db);
-    creatorsSnapshot.forEach(async (creatorDoc) => {
-        const videosSnapshot = await getDocs(collection(creatorDoc.ref, "videos"));
-        videosSnapshot.forEach(videoDoc => {
-            batch.delete(videoDoc.ref);
-        });
-        batch.delete(creatorDoc.ref);
-    });
-    batch.delete(techRef);
-
-    await batch.commit();
-    await fetchTechnologies(user?.email);
+    const newTechs = technologies.filter(tech => tech.id !== techId);
+    setTechnologies(newTechs);
+    updateLocalStorage(newTechs);
   };
 
   const deleteCreator = async (techId: string, creatorId: string) => {
-    const creatorRef = doc(db, `technologies/${techId}/creators`, creatorId);
-    const videosSnapshot = await getDocs(collection(creatorRef, "videos"));
-    const batch = writeBatch(db);
-    videosSnapshot.forEach(videoDoc => {
-        batch.delete(videoDoc.ref);
+    const newTechs = technologies.map(tech => {
+      if (tech.id === techId) {
+        return { ...tech, creators: tech.creators.filter(c => c.id !== creatorId) };
+      }
+      return tech;
     });
-    batch.delete(creatorRef);
-
-    await batch.commit();
-    await fetchTechnologies(user?.email);
+    setTechnologies(newTechs);
+    updateLocalStorage(newTechs);
   };
 
   const deleteVideo = async (techId: string, creatorId: string, videoId: string) => {
-    await deleteDoc(doc(db, `technologies/${techId}/creators/${creatorId}/videos`, videoId));
-    await fetchTechnologies(user?.email);
+    const newTechs = technologies.map(tech => {
+      if (tech.id === techId) {
+        return {
+          ...tech,
+          creators: tech.creators.map(creator => {
+            if (creator.id === creatorId) {
+              return { ...creator, videos: creator.videos.filter(v => v.id !== videoId) };
+            }
+            return creator;
+          })
+        };
+      }
+      return tech;
+    });
+    setTechnologies(newTechs);
+    updateLocalStorage(newTechs);
   };
 
   const allVideosForUser = technologies.flatMap(tech => 

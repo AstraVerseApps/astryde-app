@@ -45,7 +45,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const seedDatabase = async () => {
+  const seedDatabase = useCallback(async () => {
     console.log("Seeding database...");
     const batch = writeBatch(db);
     initialTechnologies.forEach(tech => {
@@ -67,22 +67,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
     await batch.commit();
     console.log("Database seeded.");
-};
+}, []);
 
-const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
-    const techCollection = collection(db, 'technologies');
-    const techSnapshot = await getDocs(techCollection);
-
-    if (techSnapshot.empty) {
-        await seedDatabase();
-        const newTechSnapshot = await getDocs(techCollection);
-        await processTechSnapshot(newTechSnapshot, userEmail);
-    } else {
-        await processTechSnapshot(techSnapshot, userEmail);
-    }
-  }, []);
-
-  const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null): Promise<void> => {
+const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null): Promise<Technology[]> => {
     const techList: Technology[] = [];
     for (const techDoc of techSnapshot.docs) {
         const techData = techDoc.data();
@@ -125,13 +112,29 @@ const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
         }
         techList.push(tech);
     }
-    setTechnologies(techList);
-    setLoading(false);
+    return techList;
   }
 
+  const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
+    const techCollection = collection(db, 'technologies');
+    const techSnapshot = await getDocs(techCollection);
+
+    let fetchedTechnologies: Technology[];
+
+    if (techSnapshot.empty) {
+        await seedDatabase();
+        const newTechSnapshot = await getDocs(techCollection);
+        fetchedTechnologies = await processTechSnapshot(newTechSnapshot, userEmail);
+    } else {
+        fetchedTechnologies = await processTechSnapshot(techSnapshot, userEmail);
+    }
+    setTechnologies(fetchedTechnologies);
+  }, [seedDatabase]);
+
+
   useEffect(() => {
-    setLoading(true);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setLoading(true);
       if (user) {
         setUser(user);
         setIsAdmin(user.email === 'astrydeapp@gmail.com');
@@ -141,6 +144,7 @@ const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
         setIsAdmin(false);
         await fetchTechnologies(null);
       }
+      setLoading(false);
     });
 
     return () => unsubscribe();

@@ -4,12 +4,11 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { technologies as initialTechnologies } from '@/lib/data';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 const iconMap: Record<string, React.ElementType> = {
   AppWindow,
@@ -88,43 +87,42 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      // Fetches user-specific data or sets up user-related listeners here if needed
       if (!currentUser) {
         setLoading(false);
       }
     });
 
     const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-      setLoading(true);
-      const techs: Technology[] = [];
-      for (const techDoc of snapshot.docs) {
-          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-          const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-          const creators: Creator[] = [];
+        setLoading(true);
+        if (snapshot.empty) {
+          await seedDatabase();
+        }
+        const techs: Technology[] = [];
+        for (const techDoc of snapshot.docs) {
+            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
+            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+            const creators: Creator[] = [];
 
-          for (const creatorDoc of creatorsSnapshot.docs) {
-              const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-              const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-              const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                  id: videoDoc.id,
-                  ...(videoDoc.data() as Omit<Video, 'id'>)
-              }));
-              creators.push({ id: creatorDoc.id, ...creatorData, videos });
-          }
-          techs.push({ id: techDoc.id, ...techData, creators });
-      }
-
-      setTechnologies(processTechnologies(techs));
-      setLoading(false);
+            for (const creatorDoc of creatorsSnapshot.docs) {
+                const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                    id: videoDoc.id,
+                    ...(videoDoc.data() as Omit<Video, 'id'>)
+                }));
+                creators.push({ id: creatorDoc.id, ...creatorData, videos });
+            }
+            techs.push({ id: techDoc.id, ...techData, creators });
+        }
+        setTechnologies(processTechnologies(techs));
+        setLoading(false);
     });
 
-    seedDatabase();
 
     return () => {
       unsubscribeAuth();
@@ -133,7 +131,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = (email: string) => {
-    // This is a mock login. In a real app, you'd use Firebase Auth methods.
     const mockUser = {
       uid: 'mock-uid',
       email: email,
@@ -145,7 +142,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    // In a real app, you'd use signOut(auth);
     setUser(null);
     setIsAdmin(false);
   };
@@ -175,13 +171,36 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), { ...video, status: 'Not Started' });
   };
 
+  const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {
+    const q = query(collection(db, collectionPath));
+    const snapshot = await getDocs(q);
+    snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+  };
+  
   const deleteTechnology = async (techId: string) => {
-    // This is a simplified delete. A real implementation would delete subcollections.
-    await deleteDoc(doc(db, 'technologies', techId));
+    const batch = writeBatch(db);
+    const techDocRef = doc(db, 'technologies', techId);
+
+    const creatorsSnapshot = await getDocs(collection(db, `technologies/${techId}/creators`));
+    for (const creatorDoc of creatorsSnapshot.docs) {
+      await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
+      batch.delete(creatorDoc.ref);
+    }
+    
+    batch.delete(techDocRef);
+    await batch.commit();
   };
   
   const deleteCreator = async (techId: string, creatorId: string) => {
-    await deleteDoc(doc(db, `technologies/${techId}/creators`, creatorId));
+    const batch = writeBatch(db);
+    const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
+    
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
+    
+    batch.delete(creatorDocRef);
+    await batch.commit();
   };
 
   const deleteVideo = async (techId: string, creatorId: string, videoId: string) => {
@@ -204,7 +223,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         deleteCreator,
         deleteVideo,
     }}>
-      {!loading && children}
+      {children}
     </UserContext.Provider>
   );
 };

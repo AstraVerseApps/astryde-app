@@ -27,7 +27,7 @@ interface UserContextType {
   allVideosForUser: Video[];
   login: (email: string) => void;
   logout: () => void;
-  updateVideoStatus: (videoId: string, status: Video['status']) => void;
+  updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & {iconName: string}) => Promise<void>;
   addCreator: (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => Promise<void>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
@@ -83,6 +83,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
         const creatorsCollection = collection(db, `technologies/${tech.id}/creators`);
         const creatorsSnapshot = await getDocs(creatorsCollection);
+        const userProgress = userEmail ? (await getDoc(doc(db, `users/${userEmail}`))).data()?.progress || {} : {};
+
         for (const creatorDoc of creatorsSnapshot.docs) {
             const creatorData = creatorDoc.data();
             const creator: Creator = {
@@ -94,8 +96,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
             const videosCollection = collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`);
             const videosSnapshot = await getDocs(videosCollection);
-            const userProgress = userEmail ? (await getDoc(doc(db, `users/${userEmail}`))).data()?.progress || {} : {};
-
+            
             for (const videoDoc of videosSnapshot.docs) {
                 const videoData = videoDoc.data();
                 const video: Video = {
@@ -116,7 +117,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
-    setLoading(true);
     try {
         const techCollection = collection(db, 'technologies');
         const techSnapshot = await getDocs(techCollection);
@@ -133,22 +133,32 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setTechnologies(fetchedTechnologies);
     } catch(e) {
         console.error("Error fetching technologies:", e);
-    } finally {
-        setLoading(false);
     }
   }, [seedDatabase]);
 
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('astryde-user');
-    if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setIsAdmin(parsedUser.email === 'astrydeapp@gmail.com');
-        fetchTechnologies(parsedUser.email);
-    } else {
-        fetchTechnologies(null);
-    }
+    const initialize = async () => {
+        setLoading(true);
+        try {
+            const storedUser = localStorage.getItem('astryde-user');
+            if (storedUser) {
+                const parsedUser = JSON.parse(storedUser);
+                setUser(parsedUser);
+                setIsAdmin(parsedUser.email === 'astrydeapp@gmail.com');
+                await fetchTechnologies(parsedUser.email);
+            } else {
+                await fetchTechnologies(null);
+            }
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            // Even if it fails, stop loading to not get stuck
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    initialize();
   }, [fetchTechnologies]);
 
   const login = (email: string) => {
@@ -160,14 +170,16 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('astryde-user', JSON.stringify(newUser));
     setUser(newUser);
     setIsAdmin(newUser.email === 'astrydeapp@gmail.com');
-    fetchTechnologies(newUser.email);
+    setLoading(true);
+    fetchTechnologies(newUser.email).finally(() => setLoading(false));
   }
 
   const logout = async () => {
     localStorage.removeItem('astryde-user');
     setUser(null);
     setIsAdmin(false);
-    fetchTechnologies(null);
+    setLoading(true);
+    fetchTechnologies(null).finally(() => setLoading(false));
   };
   
   const updateVideoStatus = async (videoId: string, status: Video['status']) => {

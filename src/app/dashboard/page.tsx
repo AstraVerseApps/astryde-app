@@ -1,7 +1,7 @@
 
 'use client';
 
-import { technologies, allVideos } from '@/lib/data';
+import { technologies } from '@/lib/data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,6 +12,7 @@ import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { AiSuggestions } from '@/components/ai-suggestions';
+import { useUser } from '@/context/UserContext';
 
 const statusIcons: Record<Video['status'], React.ReactNode> = {
   'Not Started': <Circle className="h-4 w-4 text-muted-foreground" />,
@@ -20,16 +21,12 @@ const statusIcons: Record<Video['status'], React.ReactNode> = {
 };
 
 export default function DashboardPage() {
-  const [videos, setVideos] = useState<Video[]>(allVideos);
+  const { videos, updateVideoStatus, allVideosForUser } = useUser();
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
-    setVideos(currentVideos =>
-      currentVideos.map(video =>
-        video.id === videoId ? { ...video, status } : video
-      )
-    );
+    updateVideoStatus(videoId, status);
   };
 
   const completedCourses = useMemo(() => videos.filter(v => v.status === 'Completed').map(v => v.id), [videos]);
@@ -203,7 +200,7 @@ export default function DashboardPage() {
           <AiSuggestions
             completedCourses={completedCourses}
             subjectsOfInterest={subjectsOfInterest}
-            allVideos={videos}
+            allVideos={allVideosForUser}
           />
         </TabsContent>
       </Tabs>

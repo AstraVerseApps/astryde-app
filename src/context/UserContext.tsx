@@ -2,6 +2,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import type { Video } from '@/types';
+import { allVideos } from '@/lib/data';
 
 interface User {
   email: string;
@@ -10,8 +12,11 @@ interface User {
 interface UserContextType {
   user: User | null;
   isAdmin: boolean;
+  videos: Video[];
+  allVideosForUser: Video[];
   login: (email: string) => void;
   logout: () => void;
+  updateVideoStatus: (videoId: string, status: Video['status']) => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -19,16 +24,13 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [videos, setVideos] = useState<Video[]>(allVideos);
 
   useEffect(() => {
-    // Check sessionStorage for user data on initial load
     const storedUser = sessionStorage.getItem('user');
     if (storedUser) {
       const parsedUser: User = JSON.parse(storedUser);
-      setUser(parsedUser);
-      if (parsedUser.email === 'astrydeapp@gmail.com') {
-        setIsAdmin(true);
-      }
+      login(parsedUser.email);
     }
   }, []);
 
@@ -36,21 +38,40 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const newUser = { email };
     setUser(newUser);
     sessionStorage.setItem('user', JSON.stringify(newUser));
+
     if (email === 'astrydeapp@gmail.com') {
       setIsAdmin(true);
     } else {
       setIsAdmin(false);
+    }
+
+    const storedVideos = sessionStorage.getItem(`video-progress-${email}`);
+    if (storedVideos) {
+      setVideos(JSON.parse(storedVideos));
+    } else {
+      setVideos(allVideos);
     }
   };
 
   const logout = () => {
     setUser(null);
     setIsAdmin(false);
+    setVideos(allVideos);
     sessionStorage.removeItem('user');
   };
 
+  const updateVideoStatus = (videoId: string, status: Video['status']) => {
+    const newVideos = videos.map(video =>
+      video.id === videoId ? { ...video, status } : video
+    );
+    setVideos(newVideos);
+    if (user) {
+      sessionStorage.setItem(`video-progress-${user.email}`, JSON.stringify(newVideos));
+    }
+  };
+
   return (
-    <UserContext.Provider value={{ user, isAdmin, login, logout }}>
+    <UserContext.Provider value={{ user, isAdmin, videos, allVideosForUser: videos, login, logout, updateVideoStatus }}>
       {children}
     </UserContext.Provider>
   );

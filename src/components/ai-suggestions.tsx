@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useTransition } from 'react';
@@ -114,7 +115,7 @@ export function AiSuggestions({ completedCourses, subjectsOfInterest, allVideos 
         </div>
       </CardContent>
       <CardFooter>
-        <Button onClick={handleGetSuggestions} disabled={isPending} className="w-full">
+        <Button onClick={handleGetSuggestions} disabled={isPending || completedCourses.length === 0} className="w-full">
           <Rocket className="mr-2 h-4 w-4" />
           {isPending ? 'Analyzing Galaxy...' : 'Suggest Next Videos'}
         </Button>

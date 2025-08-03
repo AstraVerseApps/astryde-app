@@ -44,7 +44,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [videos, setVideos] = useState<Video[]>(initialAllVideos);
-  const [technologies, setTechnologies] = useState<Technology[]>(initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string)})));
+  const [technologies, setTechnologies] = useState<Technology[]>(() => {
+    if (typeof window === 'undefined') {
+        return initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string)}));
+    }
+    const storedTech = localStorage.getItem('technologies');
+    if (storedTech) {
+        const parsedTech = JSON.parse(storedTech);
+        return parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)}));
+    }
+    return initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}));
+  });
 
   useEffect(() => {
     const storedUser = sessionStorage.getItem('user');
@@ -55,16 +65,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   }, []);
   
   useEffect(() => {
-    if (user) {
-        const storedTech = sessionStorage.getItem(`technologies-${user.email}`);
-        if(storedTech) {
-            const parsedTech = JSON.parse(storedTech);
-            setTechnologies(parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)})));
-        } else {
-            setTechnologies(initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: t.icon.displayName})));
-        }
+    const storedTech = localStorage.getItem('technologies');
+    if(storedTech) {
+        const parsedTech = JSON.parse(storedTech);
+        setTechnologies(parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)})));
+    } else {
+        const technologiesWithIcons = initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}));
+        setTechnologies(technologiesWithIcons);
+        const storableTech = technologiesWithIcons.map(t => ({...t, iconName: (t.icon as any).displayName || (t.icon as any).name, icon: undefined }));
+        localStorage.setItem('technologies', JSON.stringify(storableTech));
     }
-  }, [user]);
+  }, []);
 
   const login = (email: string) => {
     const newUser = { email };
@@ -81,34 +92,31 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (storedVideos) {
       setVideos(JSON.parse(storedVideos));
     } else {
-      setVideos(initialTechnologies.flatMap(tech => tech.creators.flatMap(c => c.videos)));
-    }
-
-    const storedTech = sessionStorage.getItem(`technologies-${email}`);
-    if(storedTech) {
-        const parsedTech = JSON.parse(storedTech);
-        setTechnologies(parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)})));
-    } else {
-        const technologiesWithIcons = initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}))
-        setTechnologies(technologiesWithIcons);
+      setVideos(technologies.flatMap(tech => tech.creators.flatMap(c => c.videos)));
     }
   };
 
   const logout = () => {
     setUser(null);
     setIsAdmin(false);
-    setVideos(initialAllVideos);
-    const technologiesWithIcons = initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}))
-    setTechnologies(technologiesWithIcons);
     sessionStorage.removeItem('user');
   };
   
   const updateTechnologiesInStateAndStorage = (newTechnologies: Technology[]) => {
-    setTechnologies(newTechnologies);
-    if (user) {
-      const storableTech = newTechnologies.map(t => ({...t, iconName: (t.icon as any).displayName || (t.icon as any).name, icon: undefined }));
-      sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(storableTech));
-    }
+    const technologiesWithIcons = newTechnologies.map(t => {
+      const iconName = (t.icon as any).displayName || (t.icon as any).name;
+      if (!iconName && process.env.NODE_ENV === 'development') {
+        console.warn(`Icon for technology "${t.name}" has no displayName or name.`);
+      }
+      return {
+        ...t, 
+        icon: getIconComponent(iconName), 
+        iconName: iconName
+      };
+    });
+    setTechnologies(technologiesWithIcons);
+    const storableTech = technologiesWithIcons.map(t => ({...t, iconName: (t.icon as any).displayName || (t.icon as any).name, icon: undefined }));
+    localStorage.setItem('technologies', JSON.stringify(storableTech));
   }
 
   const updateVideoStatus = (videoId: string, status: Video['status']) => {
@@ -137,7 +145,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const newTechnology: Technology = {
         ...tech,
         id: `tech-${Date.now()}`,
-        icon: BrainCircuit, // Default icon
+        icon: BrainCircuit,
         creators: [],
     };
     const newTechnologies = [...technologies, newTechnology];

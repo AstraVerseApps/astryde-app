@@ -1,25 +1,39 @@
 
 'use client';
 
-import React from 'react';
+import React, 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlusCircle, UploadCloud } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { technologies } from '@/lib/data';
+import type { Creator } from '@/types';
 
 export default function AdminPage() {
+  const [selectedTech, setSelectedTech] = React.useState<string>('');
+  const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
+
+  const handleTechChangeForCreator = (techId: string) => {
+    // In a real app, you'd probably fetch this, but for now we filter
+    const tech = technologies.find(t => t.id === techId);
+    setCreatorsForTech(tech ? tech.creators : []);
+  };
+
+
   return (
     <>
       <div className="flex items-center">
         <h1 className="text-lg font-semibold md:text-2xl font-headline">Admin Control Panel</h1>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-8 md:grid-cols-1">
+        {/* Add New Technology */}
         <Card>
           <CardHeader>
-            <CardTitle>Add New Technology</CardTitle>
-            <CardDescription>Add a new technology category to the learning galaxy.</CardDescription>
+            <CardTitle>Step 1: Add New Technology</CardTitle>
+            <CardDescription>Add a new technology category to the learning galaxy. This is the first step before adding creators or videos.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -37,12 +51,26 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        {/* Add New Creator */}
         <Card>
           <CardHeader>
-            <CardTitle>Add New Creator</CardTitle>
-            <CardDescription>Add a new content creator to a technology.</CardDescription>
+            <CardTitle>Step 2: Add New Creator</CardTitle>
+            <CardDescription>Add a new content creator and assign them to a technology.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="tech-select-creator">Technology</Label>
+                <Select>
+                    <SelectTrigger id="tech-select-creator">
+                        <SelectValue placeholder="Select a technology" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {technologies.map(tech => (
+                            <SelectItem key={tech.id} value={tech.id}>{tech.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
              <div className="space-y-2">
               <Label htmlFor="creator-name">Creator Name</Label>
               <Input id="creator-name" placeholder="e.g. Dr. Nova" />
@@ -58,13 +86,42 @@ export default function AdminPage() {
           </CardContent>
         </Card>
         
-        <Card className="md:col-span-2">
+        {/* Add New Video */}
+        <Card>
             <CardHeader>
-                <CardTitle>Add New Video</CardTitle>
-                <CardDescription>Add a new video from a creator.</CardDescription>
+                <CardTitle>Step 3: Add New Video</CardTitle>
+                <CardDescription>Add a new video from a creator to a specific technology.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="tech-select-video">Technology</Label>
+                        <Select onValueChange={handleTechChangeForCreator}>
+                            <SelectTrigger id="tech-select-video">
+                                <SelectValue placeholder="Select a technology" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {technologies.map(tech => (
+                                    <SelectItem key={tech.id} value={tech.id}>{tech.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="creator-select-video">Creator</Label>
+                        <Select>
+                            <SelectTrigger id="creator-select-video">
+                                <SelectValue placeholder="Select a creator" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {creatorsForTech.map(creator => (
+                                     <SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                 <div className="space-y-2">
                     <Label htmlFor="video-title">Video Title</Label>
                     <Input id="video-title" placeholder="e.g. Introduction to Warp Drives" />
                 </div>
@@ -90,4 +147,3 @@ export default function AdminPage() {
     </>
   );
 }
-

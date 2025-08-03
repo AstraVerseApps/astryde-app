@@ -6,11 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
 import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { AiSuggestions } from '@/components/ai-suggestions';
 import { useUser } from '@/context/UserContext';
 
 const statusIcons: Record<Video['status'], React.ReactNode> = {
@@ -20,7 +19,7 @@ const statusIcons: Record<Video['status'], React.ReactNode> = {
 };
 
 export default function DashboardPage() {
-  const { videos, updateVideoStatus, allVideosForUser, technologies } = useUser();
+  const { updateVideoStatus, technologies } = useUser();
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
@@ -28,34 +27,6 @@ export default function DashboardPage() {
     updateVideoStatus(videoId, status);
   };
 
-  const completedCourses = useMemo(() => videos.filter(v => v.status === 'Completed').map(v => v.id), [videos]);
-  const subjectsOfInterest = useMemo(() => {
-    const interestedVideoIds = videos
-      .filter(v => v.status === 'Completed' || v.status === 'In Progress')
-      .map(v => v.id);
-    const subjects = new Set<string>();
-    technologies.forEach(tech => {
-      tech.creators.forEach(creator => {
-        creator.videos.forEach(video => {
-          if (interestedVideoIds.includes(video.id)) {
-            subjects.add(tech.name);
-          }
-        });
-      });
-    });
-    return Array.from(subjects);
-  }, [videos, technologies]);
-
-  const getVideoById = (id: string): Video | undefined => {
-    for (const tech of technologies) {
-      for (const creator of tech.creators) {
-        const video = creator.videos.find(v => v.id === id);
-        if (video) return video;
-      }
-    }
-    return undefined;
-  };
-  
   const renderVideoList = () => {
     if (!selectedTech || !selectedCreator) return null;
 
@@ -194,30 +165,15 @@ export default function DashboardPage() {
       <div className="flex items-center">
         <h1 className="text-lg font-semibold md:text-2xl font-headline">Cosmic Dashboard</h1>
       </div>
-      <Tabs defaultValue="learning-path" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="learning-path">Learning Path</TabsTrigger>
-          <TabsTrigger value="ai-suggestions">AI Suggestions</TabsTrigger>
-        </TabsList>
-        <TabsContent value="learning-path">
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Learning Galaxy</CardTitle>
-              <CardDescription>Explore technologies, creators, and videos to expand your universe of knowledge.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {renderLearningPath()}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="ai-suggestions">
-          <AiSuggestions
-            completedCourses={completedCourses}
-            subjectsOfInterest={subjectsOfInterest}
-            allVideos={allVideosForUser}
-          />
-        </TabsContent>
-      </Tabs>
+       <Card>
+        <CardHeader>
+          <CardTitle>Your Learning Galaxy</CardTitle>
+          <CardDescription>Explore technologies, creators, and videos to expand your universe of knowledge.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            {renderLearningPath()}
+        </CardContent>
+      </Card>
     </>
   );
 }

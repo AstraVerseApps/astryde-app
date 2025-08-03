@@ -12,7 +12,7 @@ import { CheckCircle, Edit } from "lucide-react";
 
 export default function ProfilePage() {
     const { user, isAdmin } = useUser();
-    const userInitial = user?.email?.charAt(0).toUpperCase() || user?.displayName?.charAt(0).toUpperCase() || 'U';
+    const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
     const userAvatar = user?.photoURL;
     const userDisplayName = user?.displayName || user?.email;
 
@@ -62,7 +62,7 @@ export default function ProfilePage() {
                 </div>
                  <div className="grid gap-2">
                     <Label htmlFor="phone">Phone Number</Label>
-                    <Input id="phone" type="tel" defaultValue={user?.phoneNumber || ''} disabled />
+                    <Input id="phone" type="tel" defaultValue={''} disabled />
                 </div>
                 {isAdmin && (
                     <div className="flex items-center justify-between rounded-lg border p-4">

@@ -40,7 +40,7 @@ export default function DashboardLayout({
 }) {
   const { user, isAdmin, logout, loading } = useUser();
   const router = useRouter();
-  const userInitial = user?.email?.charAt(0).toUpperCase() || user?.displayName?.charAt(0).toUpperCase() || 'U';
+  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
   const userAvatar = user?.photoURL;
   const userDisplayName = user?.displayName || user?.email;
 

@@ -5,9 +5,8 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import type { Video, Technology, Creator } from '@/types';
 import { technologies as initialTechnologies } from '@/lib/data';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
-import { db, auth } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { collection, doc, getDocs, writeBatch, deleteDoc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
 
 const iconMap: Record<string, React.ElementType> = {
   AppWindow,
@@ -22,10 +21,11 @@ const getIconComponent = (iconName?: string) => {
 };
 
 interface UserContextType {
-  user: User | null;
+  user: { email: string; displayName: string; photoURL?: string } | null;
   isAdmin: boolean;
   technologies: Technology[];
   allVideosForUser: Video[];
+  login: (email: string) => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => void;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & {iconName: string}) => Promise<void>;
@@ -40,7 +40,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ email: string; displayName: string; photoURL?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,9 +67,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
     await batch.commit();
     console.log("Database seeded.");
-}, []);
+  }, []);
 
-const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null): Promise<Technology[]> => {
+  const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null): Promise<Technology[]> => {
     const techList: Technology[] = [];
     for (const techDoc of techSnapshot.docs) {
         const techData = techDoc.data();
@@ -116,42 +116,58 @@ const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null)
   }
 
   const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
-    const techCollection = collection(db, 'technologies');
-    const techSnapshot = await getDocs(techCollection);
+    setLoading(true);
+    try {
+        const techCollection = collection(db, 'technologies');
+        const techSnapshot = await getDocs(techCollection);
 
-    let fetchedTechnologies: Technology[];
+        let fetchedTechnologies: Technology[];
 
-    if (techSnapshot.empty) {
-        await seedDatabase();
-        const newTechSnapshot = await getDocs(techCollection);
-        fetchedTechnologies = await processTechSnapshot(newTechSnapshot, userEmail);
-    } else {
-        fetchedTechnologies = await processTechSnapshot(techSnapshot, userEmail);
+        if (techSnapshot.empty) {
+            await seedDatabase();
+            const newTechSnapshot = await getDocs(techCollection);
+            fetchedTechnologies = await processTechSnapshot(newTechSnapshot, userEmail);
+        } else {
+            fetchedTechnologies = await processTechSnapshot(techSnapshot, userEmail);
+        }
+        setTechnologies(fetchedTechnologies);
+    } catch(e) {
+        console.error("Error fetching technologies:", e);
+    } finally {
+        setLoading(false);
     }
-    setTechnologies(fetchedTechnologies);
   }, [seedDatabase]);
 
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setLoading(true);
-      if (user) {
-        setUser(user);
-        setIsAdmin(user.email === 'astrydeapp@gmail.com');
-        await fetchTechnologies(user.email);
-      } else {
-        setUser(null);
-        setIsAdmin(false);
-        await fetchTechnologies(null);
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const storedUser = localStorage.getItem('astryde-user');
+    if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setIsAdmin(parsedUser.email === 'astrydeapp@gmail.com');
+        fetchTechnologies(parsedUser.email);
+    } else {
+        fetchTechnologies(null);
+    }
   }, [fetchTechnologies]);
 
+  const login = (email: string) => {
+    const newUser = {
+        email,
+        displayName: email.split('@')[0],
+        photoURL: ''
+    };
+    localStorage.setItem('astryde-user', JSON.stringify(newUser));
+    setUser(newUser);
+    setIsAdmin(newUser.email === 'astrydeapp@gmail.com');
+    fetchTechnologies(newUser.email);
+  }
+
   const logout = async () => {
-    await auth.signOut();
+    localStorage.removeItem('astryde-user');
+    setUser(null);
+    setIsAdmin(false);
+    fetchTechnologies(null);
   };
   
   const updateVideoStatus = async (videoId: string, status: Video['status']) => {
@@ -204,7 +220,6 @@ const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null)
   const deleteTechnology = async (techId: string) => {
     const techRef = doc(db, "technologies", techId);
     
-    // Also delete subcollections (creators and their videos)
     const creatorsSnapshot = await getDocs(collection(techRef, "creators"));
     const batch = writeBatch(db);
     creatorsSnapshot.forEach(async (creatorDoc) => {
@@ -248,7 +263,8 @@ const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null)
         user, 
         isAdmin, 
         technologies,
-        allVideosForUser, 
+        allVideosForUser,
+        login, 
         logout, 
         updateVideoStatus,
         addTechnology,

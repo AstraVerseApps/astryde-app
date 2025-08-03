@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { AstrydeLogo } from '@/components/icons';
@@ -40,9 +39,7 @@ export default function DashboardLayout({
 }) {
   const { user, isAdmin, logout, loading } = useUser();
   const router = useRouter();
-  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
-  const userAvatar = user?.photoURL;
-  const userDisplayName = user?.displayName || user?.email;
+  
 
   React.useEffect(() => {
     if (!loading && !user) {
@@ -50,13 +47,18 @@ export default function DashboardLayout({
     }
   }, [user, loading, router]);
   
-  if (loading) {
+  if (loading || !user) {
     return (
         <div className="flex items-center justify-center min-h-screen">
             <AstrydeLogo />
         </div>
     )
   }
+
+  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
+  const userAvatar = user?.photoURL;
+  const userDisplayName = user?.displayName || user?.email;
+
 
   const handleLogout = async () => {
     await logout();

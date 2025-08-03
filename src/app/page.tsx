@@ -27,7 +27,7 @@ export default function LoginPage() {
     login(email);
   };
   
-  if (loading || user) {
+  if (loading || (!loading && user)) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
             <AstrydeLogo />
@@ -46,7 +46,7 @@ export default function LoginPage() {
           <CardDescription>Your cosmic journey to mastering tech skills starts here.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input 
@@ -62,7 +62,7 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="button" className="w-full" onClick={handleLogin}>
+            <Button type="submit" className="w-full">
               Sign In
             </Button>
           </form>

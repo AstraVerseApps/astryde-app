@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
 import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,23 @@ export default function DashboardPage() {
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
+  useEffect(() => {
+    // This effect runs when the 'technologies' data changes.
+    // It checks if the currently selected tech or creator still exists in the new data.
+    // If not, it resets the selection, preventing the UI from showing stale data.
+    if (selectedTech && !technologies.find(t => t.id === selectedTech.id)) {
+      setSelectedTech(null);
+      setSelectedCreator(null);
+    }
+    if (selectedCreator) {
+        const tech = technologies.find(t => t.id === selectedTech?.id);
+        if (!tech || !tech.creators.find(c => c.id === selectedCreator.id)) {
+            setSelectedCreator(null);
+        }
+    }
+  }, [technologies, selectedTech, selectedCreator]);
+
+
   const handleStatusChange = (videoId: string, status: Video['status']) => {
     updateVideoStatus(videoId, status);
   };
@@ -30,7 +47,11 @@ export default function DashboardPage() {
   const renderVideoList = () => {
     if (!selectedTech || !selectedCreator) return null;
 
-    const creatorVideos = selectedCreator.videos;
+    // Ensure we have the latest creator data
+    const currentTech = technologies.find(t => t.id === selectedTech.id);
+    const currentCreator = currentTech?.creators.find(c => c.id === selectedCreator.id);
+
+    if (!currentCreator) return null;
 
     return (
       <div>
@@ -40,16 +61,16 @@ export default function DashboardPage() {
         </Button>
         <div className="flex items-center gap-4 mb-6">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={selectedCreator.avatar} />
-              <AvatarFallback>{selectedCreator.name.charAt(0)}</AvatarFallback>
+              <AvatarImage src={currentCreator.avatar} />
+              <AvatarFallback>{currentCreator.name.charAt(0)}</AvatarFallback>
             </Avatar>
             <div>
-                <h2 className="text-2xl font-bold font-headline">{selectedCreator.name}</h2>
+                <h2 className="text-2xl font-bold font-headline">{currentCreator.name}</h2>
                 <p className="text-muted-foreground">Videos on {selectedTech.name}</p>
             </div>
         </div>
         <div className="space-y-4">
-          {creatorVideos.map((video) => (
+          {currentCreator.videos.map((video) => (
             <Card key={video.id} className="flex items-center justify-between p-4 group">
               <div className="flex items-center gap-4">
                 <div className="w-40 h-24 bg-muted rounded-md overflow-hidden shrink-0">
@@ -84,7 +105,12 @@ export default function DashboardPage() {
 
   const renderCreatorGrid = () => {
     if (!selectedTech) return null;
-    const Icon = selectedTech.icon;
+    
+    // Ensure we have the latest tech data
+    const currentTech = technologies.find(t => t.id === selectedTech.id);
+    if (!currentTech) return null;
+
+    const Icon = currentTech.icon;
     return (
       <div>
         <Button variant="ghost" onClick={() => {
@@ -96,10 +122,10 @@ export default function DashboardPage() {
         </Button>
         <div className="flex items-center gap-4 mb-6">
             <Icon className="h-10 w-10 text-primary icon-glow" />
-            <h2 className="text-3xl font-bold font-headline">{selectedTech.name}</h2>
+            <h2 className="text-3xl font-bold font-headline">{currentTech.name}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {selectedTech.creators.map(creator => (
+          {currentTech.creators.map(creator => (
             <Card key={creator.id} className="cursor-pointer hover:shadow-lg hover:border-primary transition-all" onClick={() => setSelectedCreator(creator)}>
               <CardHeader className="items-center text-center">
                   <Avatar className="h-24 w-24 mb-4">

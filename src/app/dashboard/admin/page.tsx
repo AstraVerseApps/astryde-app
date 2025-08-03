@@ -90,22 +90,24 @@ export default function AdminPage() {
   const handleDelete = async () => {
     if (deleteType === 'technology' && selectedTechForDelete) {
         await deleteTechnology(selectedTechForDelete);
-        setSelectedTechForDelete('');
     } else if (deleteType === 'creator' && selectedCreatorForDelete) {
         const techIdForCreator = technologies.find(t => t.creators.some(c => c.id === selectedCreatorForDelete))?.id;
         if(techIdForCreator) {
           await deleteCreator(techIdForCreator, selectedCreatorForDelete);
         }
-        setSelectedCreatorForDelete('');
     } else if (deleteType === 'video' && selectedVideoForDelete) {
         const techIdForVideo = technologies.find(t => t.creators.some(c => c.videos.some(v => v.id === selectedVideoForDelete)))?.id;
         const creatorIdForVideo = technologies.flatMap(t => t.creators).find(c => c.videos.some(v => v.id === selectedVideoForDelete))?.id;
         if (techIdForVideo && creatorIdForVideo) {
           await deleteVideo(techIdForVideo, creatorIdForVideo, selectedVideoForDelete);
         }
-        setSelectedVideoForDelete('');
     }
+    
+    // Reset state and refresh the page to reflect changes
     setDeleteType('');
+    setSelectedTechForDelete('');
+    setSelectedCreatorForDelete('');
+    setSelectedVideoForDelete('');
     router.refresh();
   };
   

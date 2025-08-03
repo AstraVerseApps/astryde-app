@@ -8,47 +8,59 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlusCircle, UploadCloud, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { technologies } from '@/lib/data';
 import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useUser } from '@/context/UserContext';
 
 export default function AdminPage() {
+  const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo } = useUser();
+
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
   const [videosForCreator, setVideosForCreator] = React.useState<Video[]>([]);
   const [selectedTechForCreator, setSelectedTechForCreator] = React.useState<string>('');
   
+  // Add state
+  const [newTechName, setNewTechName] = React.useState('');
+  const [newTechDesc, setNewTechDesc] = React.useState('');
+  const [newCreatorName, setNewCreatorName] = React.useState('');
+  const [newCreatorAvatar, setNewCreatorAvatar] = React.useState('');
+  const [selectedTechForNewCreator, setSelectedTechForNewCreator] = React.useState('');
+  const [newVideoTitle, setNewVideoTitle] = React.useState('');
+  const [newVideoDuration, setNewVideoDuration] = React.useState('');
+  const [newVideoThumbnail, setNewVideoThumbnail] = React.useState('');
+  const [newVideoUrl, setNewVideoUrl] = React.useState('');
+  const [selectedTechForNewVideo, setSelectedTechForNewVideo] = React.useState('');
+  const [selectedCreatorForNewVideo, setSelectedCreatorForNewVideo] = React.useState('');
+
+
+  // Delete state
   const [deleteType, setDeleteType] = React.useState<'technology' | 'creator' | 'video' | ''>('');
-  const [deleteTech, setDeleteTech] = React.useState<string>('');
-  const [deleteCreator, setDeleteCreator] = React.useState<string>('');
+  const [selectedTechForDelete, setSelectedTechForDelete] = React.useState<string>('');
+  const [selectedCreatorForDelete, setSelectedCreatorForDelete] = React.useState<string>('');
+  const [selectedVideoForDelete, setSelectedVideoForDelete] = React.useState<string>('');
 
-  const handleTechChange = (techId: string) => {
-    setSelectedTechForCreator(techId);
+  const handleTechChangeForVideo = (techId: string) => {
+    setSelectedTechForNewVideo(techId);
     const tech = technologies.find(t => t.id === techId);
     setCreatorsForTech(tech ? tech.creators : []);
-    setVideosForCreator([]);
+    setSelectedCreatorForNewVideo('');
   };
 
-  const handleCreatorChange = (creatorId: string) => {
-    const tech = technologies.find(t => t.id === selectedTechForCreator);
-    const creator = tech?.creators.find(c => c.id === creatorId);
-    setVideosForCreator(creator ? creator.videos : []);
-  }
-
-  const handleTechChangeForDelete = (techId: string) => {
-    setDeleteTech(techId);
-    setDeleteCreator('');
-    const tech = technologies.find(t => t.id === techId);
-    setCreatorsForTech(tech ? tech.creators : []);
-    setVideosForCreator([]);
+  const handleDelete = () => {
+    if (deleteType === 'technology' && selectedTechForDelete) {
+        deleteTechnology(selectedTechForDelete);
+        setSelectedTechForDelete('');
+    } else if (deleteType === 'creator' && selectedCreatorForDelete) {
+        deleteCreator(selectedTechForDelete, selectedCreatorForDelete);
+        setSelectedCreatorForDelete('');
+    } else if (deleteType === 'video' && selectedVideoForDelete) {
+        deleteVideo(selectedTechForDelete, selectedCreatorForDelete, selectedVideoForDelete);
+        setSelectedVideoForDelete('');
+    }
+    setDeleteType('');
   };
-
-  const handleCreatorChangeForDelete = (creatorId: string) => {
-    setDeleteCreator(creatorId);
-    const tech = technologies.find(t => t.id === deleteTech);
-    const creator = tech?.creators.find(c => c.id === creatorId);
-    setVideosForCreator(creator ? creator.videos : []);
-  }
   
+
   const getDeleteDialogContent = () => {
     switch(deleteType) {
         case 'technology':
@@ -74,6 +86,19 @@ export default function AdminPage() {
     }
   }
   const { title: deleteTitle, description: deleteDescription } = getDeleteDialogContent();
+
+  const creatorsForDelete = React.useMemo(() => {
+    if (!selectedTechForDelete) return [];
+    const tech = technologies.find(t => t.id === selectedTechForDelete);
+    return tech ? tech.creators : [];
+  }, [selectedTechForDelete, technologies]);
+
+  const videosForDelete = React.useMemo(() => {
+     if (!selectedTechForDelete || !selectedCreatorForDelete) return [];
+     const tech = technologies.find(t => t.id === selectedTechForDelete);
+     const creator = tech?.creators.find(c => c.id === selectedCreatorForDelete);
+     return creator ? creator.videos : [];
+  }, [selectedTechForDelete, selectedCreatorForDelete, technologies]);
 
   return (
     <>
@@ -157,7 +182,7 @@ export default function AdminPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="tech-select-video-add">Technology</Label>
-                                <Select onValueChange={handleTechChange}>
+                                <Select onValueChange={handleTechChangeForVideo}>
                                     <SelectTrigger id="tech-select-video-add">
                                         <SelectValue placeholder="Select" />
                                     </SelectTrigger>
@@ -170,7 +195,7 @@ export default function AdminPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="creator-select-video-add">Creator</Label>
-                                <Select disabled={creatorsForTech.length === 0} onValueChange={handleCreatorChange}>
+                                <Select disabled={creatorsForTech.length === 0} onValueChange={setSelectedCreatorForNewVideo}>
                                     <SelectTrigger id="creator-select-video-add">
                                         <SelectValue placeholder="Select" />
                                     </SelectTrigger>
@@ -223,7 +248,12 @@ export default function AdminPage() {
                     <CardContent className="space-y-4">
                          <div className="space-y-2">
                             <Label htmlFor="delete-type-select">Content Type</Label>
-                            <Select onValueChange={(value: 'technology' | 'creator' | 'video' | '') => setDeleteType(value)}>
+                            <Select onValueChange={(value: 'technology' | 'creator' | 'video' | '') => {
+                                setDeleteType(value);
+                                setSelectedTechForDelete('');
+                                setSelectedCreatorForDelete('');
+                                setSelectedVideoForDelete('');
+                            }}>
                                 <SelectTrigger id="delete-type-select" className="border-destructive focus:ring-destructive">
                                     <SelectValue placeholder="Select what to delete" />
                                 </SelectTrigger>
@@ -237,10 +267,14 @@ export default function AdminPage() {
                         
                         {deleteType && (
                             <div className="space-y-4 pt-4 border-t border-dashed border-destructive/50">
-                                {deleteType === 'technology' && (
+                                {(deleteType === 'technology' || deleteType === 'creator' || deleteType === 'video') && (
                                      <div className="space-y-2">
                                         <Label htmlFor="tech-select-delete">Technology</Label>
-                                        <Select>
+                                        <Select value={selectedTechForDelete} onValueChange={(value) => {
+                                            setSelectedTechForDelete(value);
+                                            setSelectedCreatorForDelete('');
+                                            setSelectedVideoForDelete('');
+                                        }}>
                                             <SelectTrigger id="tech-select-delete" className="border-destructive focus:ring-destructive">
                                                 <SelectValue placeholder="Select a technology" />
                                             </SelectTrigger>
@@ -254,30 +288,21 @@ export default function AdminPage() {
                                 )}
                                 
                                 {(deleteType === 'creator' || deleteType === 'video') && (
-                                    <div className="space-y-2">
-                                        <Label htmlFor="tech-select-delete-cascade">Technology</Label>
-                                        <Select onValueChange={handleTechChangeForDelete}>
-                                            <SelectTrigger id="tech-select-delete-cascade" className="border-destructive focus:ring-destructive">
-                                                <SelectValue placeholder="Select a technology" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {technologies.map(tech => (
-                                                    <SelectItem key={tech.id} value={tech.id}>{tech.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                )}
-
-                                 {(deleteType === 'creator' || deleteType === 'video') && (
                                      <div className="space-y-2">
                                         <Label htmlFor="creator-select-delete-cascade">Creator</Label>
-                                        <Select onValueChange={handleCreatorChangeForDelete} disabled={creatorsForTech.length === 0}>
+                                        <Select 
+                                            value={selectedCreatorForDelete}
+                                            onValueChange={(value) => {
+                                                setSelectedCreatorForDelete(value);
+                                                setSelectedVideoForDelete('');
+                                            }} 
+                                            disabled={creatorsForDelete.length === 0}
+                                        >
                                             <SelectTrigger id="creator-select-delete-cascade" className="border-destructive focus:ring-destructive">
                                                 <SelectValue placeholder="Select a creator" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {creatorsForTech.map(creator => (
+                                                {creatorsForDelete.map(creator => (
                                                     <SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -288,12 +313,16 @@ export default function AdminPage() {
                                 {deleteType === 'video' && (
                                      <div className="space-y-2">
                                         <Label htmlFor="video-select-delete-cascade">Video</Label>
-                                        <Select disabled={videosForCreator.length === 0}>
+                                        <Select 
+                                            value={selectedVideoForDelete}
+                                            onValueChange={setSelectedVideoForDelete}
+                                            disabled={videosForDelete.length === 0}
+                                        >
                                             <SelectTrigger id="video-select-delete-cascade" className="border-destructive focus:ring-destructive">
                                                 <SelectValue placeholder="Select a video" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {videosForCreator.map(video => (
+                                                {videosForDelete.map(video => (
                                                     <SelectItem key={video.id} value={video.id}>{video.title}</SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -308,7 +337,7 @@ export default function AdminPage() {
                     <div className="p-6 pt-0">
                          <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <Button variant="destructive" className="w-full" disabled={!deleteType}>
+                                <Button variant="destructive" className="w-full" disabled={!deleteType || (deleteType === 'technology' && !selectedTechForDelete) || (deleteType === 'creator' && !selectedCreatorForDelete) || (deleteType === 'video' && !selectedVideoForDelete) }>
                                     <Trash2 className="mr-2 h-4 w-4" />
                                     Delete Selected Content
                                 </Button>
@@ -322,7 +351,7 @@ export default function AdminPage() {
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction>Continue</AlertDialogAction>
+                                    <AlertDialogAction onClick={handleDelete}>Continue</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>

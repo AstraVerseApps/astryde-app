@@ -1,7 +1,6 @@
 
 'use client';
 
-import { technologies } from '@/lib/data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,7 +20,7 @@ const statusIcons: Record<Video['status'], React.ReactNode> = {
 };
 
 export default function DashboardPage() {
-  const { videos, updateVideoStatus, allVideosForUser } = useUser();
+  const { videos, updateVideoStatus, allVideosForUser, technologies } = useUser();
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
@@ -45,14 +44,22 @@ export default function DashboardPage() {
       });
     });
     return Array.from(subjects);
-  }, [videos]);
+  }, [videos, technologies]);
 
-  const getVideoById = (id: string) => videos.find(v => v.id === id);
-
+  const getVideoById = (id: string): Video | undefined => {
+    for (const tech of technologies) {
+      for (const creator of tech.creators) {
+        const video = creator.videos.find(v => v.id === id);
+        if (video) return video;
+      }
+    }
+    return undefined;
+  };
+  
   const renderVideoList = () => {
     if (!selectedTech || !selectedCreator) return null;
 
-    const creatorVideos = selectedCreator.videos.map(v => getVideoById(v.id)).filter(Boolean) as Video[];
+    const creatorVideos = selectedCreator.videos;
 
     return (
       <div>
@@ -108,7 +115,10 @@ export default function DashboardPage() {
     if (!selectedTech) return null;
     return (
       <div>
-        <Button variant="ghost" onClick={() => setSelectedTech(null)} className="mb-4">
+        <Button variant="ghost" onClick={() => {
+          setSelectedTech(null);
+          setSelectedCreator(null);
+        }} className="mb-4">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Technologies
         </Button>

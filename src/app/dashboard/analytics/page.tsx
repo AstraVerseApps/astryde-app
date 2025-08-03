@@ -5,29 +5,17 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useUser } from '@/context/UserContext';
-import { technologies } from '@/lib/data';
 import type { Video } from '@/types';
 
 export default function AnalyticsPage() {
-  const { videos } = useUser();
+  const { technologies } = useUser();
 
   const analyticsData = technologies.map(tech => {
     const techVideos: Video[] = tech.creators.flatMap(c => c.videos);
     
-    const completed = techVideos.filter(v => {
-        const userVideo = videos.find(uv => uv.id === v.id);
-        return userVideo?.status === 'Completed';
-    }).length;
-
-    const inProgress = techVideos.filter(v => {
-        const userVideo = videos.find(uv => uv.id === v.id);
-        return userVideo?.status === 'In Progress';
-    }).length;
-
-    const notStarted = techVideos.filter(v => {
-        const userVideo = videos.find(uv => uv.id === v.id);
-        return userVideo?.status === 'Not Started';
-    }).length;
+    const completed = techVideos.filter(v => v.status === 'Completed').length;
+    const inProgress = techVideos.filter(v => v.status === 'In Progress').length;
+    const notStarted = techVideos.filter(v => v.status === 'Not Started').length;
     
     return {
       name: tech.name,
@@ -51,9 +39,9 @@ export default function AnalyticsPage() {
         <CardContent>
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analyticsData} layout="vertical" stackOffset="expand">
+              <BarChart data={analyticsData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" hide />
+                <XAxis type="number" />
                 <YAxis dataKey="name" type="category" width={120} />
                 <Tooltip
                   cursor={{ fill: 'hsl(var(--muted))' }}

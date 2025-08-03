@@ -66,7 +66,7 @@ export default function DashboardLayout({
                 Profile
               </Link>
               <Link
-                href="#"
+                href="/dashboard/analytics"
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
               >
                 <LineChart className="h-4 w-4" />
@@ -122,7 +122,7 @@ export default function DashboardLayout({
                   Profile
                 </Link>
                 <Link
-                  href="#"
+                  href="/dashboard/analytics"
                   className="mx-[-0.65rem] flex items-center gap-4 rounded-xl px-3 py-2 text-muted-foreground hover:text-foreground"
                 >
                   <LineChart className="h-5 w-5" />
@@ -164,7 +164,7 @@ export default function DashboardLayout({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{user?.email || 'My Account'}</DropdownMenuLabel>
+              <DropdownMenuLabel className="break-all">{user?.email || 'My Account'}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>

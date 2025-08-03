@@ -70,7 +70,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 };
 
 const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
-    setLoading(true);
     const techCollection = collection(db, 'technologies');
     const techSnapshot = await getDocs(techCollection);
 
@@ -141,8 +140,8 @@ const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
         setUser(null);
         setIsAdmin(false);
         await fetchTechnologies(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -183,7 +182,7 @@ const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
         id,
         iconName,
     };
-    await setDoc(doc(db, "technologies", id), newTechnology);
+    await setDoc(doc(db, "technologies", id), {name: newTechnology.name, description: newTechnology.description, iconName: newTechnology.iconName});
     await fetchTechnologies(user?.email);
   };
 

@@ -113,6 +113,7 @@ export default function DashboardPage() {
 
   const renderCreatorGrid = () => {
     if (!selectedTech) return null;
+    const Icon = selectedTech.icon;
     return (
       <div>
         <Button variant="ghost" onClick={() => {
@@ -123,7 +124,7 @@ export default function DashboardPage() {
           Back to Technologies
         </Button>
         <div className="flex items-center gap-4 mb-6">
-            <selectedTech.icon className="h-10 w-10 text-primary icon-glow" />
+            <Icon className="h-10 w-10 text-primary icon-glow" />
             <h2 className="text-3xl font-bold font-headline">{selectedTech.name}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -146,31 +147,34 @@ export default function DashboardPage() {
 
   const renderTechnologyGrid = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-      {technologies.map(tech => (
-        <Card key={tech.id} className="cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-transform duration-300" onClick={() => setSelectedTech(tech)}>
-          <CardHeader>
-            <div className="flex items-center gap-4 mb-2">
-                <tech.icon className="h-10 w-10 text-primary icon-glow" />
-                <CardTitle className="text-2xl font-headline">{tech.name}</CardTitle>
-            </div>
-            <CardDescription>{tech.description}</CardDescription>
-          </CardHeader>
-          <CardContent>
-             <div className="flex -space-x-4 rtl:space-x-reverse">
-                {tech.creators.slice(0, 3).map(creator => (
-                    <Avatar key={creator.id} className="border-2 border-background">
-                        <AvatarImage src={creator.avatar} />
-                        <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                ))}
-                {tech.creators.length > 3 && (
-                     <a className="flex items-center justify-center w-10 h-10 text-xs font-medium text-white bg-gray-700 border-2 border-white rounded-full hover:bg-gray-600 dark:border-gray-800" href="#">+{tech.creators.length - 3}</a>
-                )}
-             </div>
-             <p className="text-sm text-muted-foreground mt-2">{tech.creators.length} creators</p>
-          </CardContent>
-        </Card>
-      ))}
+      {technologies.map(tech => {
+        const Icon = tech.icon;
+        return (
+            <Card key={tech.id} className="cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-transform duration-300" onClick={() => setSelectedTech(tech)}>
+              <CardHeader>
+                <div className="flex items-center gap-4 mb-2">
+                    <Icon className="h-10 w-10 text-primary icon-glow" />
+                    <CardTitle className="text-2xl font-headline">{tech.name}</CardTitle>
+                </div>
+                <CardDescription>{tech.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                 <div className="flex -space-x-4 rtl:space-x-reverse">
+                    {tech.creators.slice(0, 3).map(creator => (
+                        <Avatar key={creator.id} className="border-2 border-background">
+                            <AvatarImage src={creator.avatar} />
+                            <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                    ))}
+                    {tech.creators.length > 3 && (
+                         <a className="flex items-center justify-center w-10 h-10 text-xs font-medium text-white bg-gray-700 border-2 border-white rounded-full hover:bg-gray-600 dark:border-gray-800" href="#">+{tech.creators.length - 3}</a>
+                    )}
+                 </div>
+                 <p className="text-sm text-muted-foreground mt-2">{tech.creators.length} creators</p>
+              </CardContent>
+            </Card>
+        )
+      })}
     </div>
   );
   

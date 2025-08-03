@@ -1,17 +1,17 @@
-"use client";
 
-import { technologies, allVideos } from "@/lib/data";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+'use client';
+
+import { technologies, allVideos } from '@/lib/data';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
-import { Circle, CheckCircle2, PlayCircle, Clock } from 'lucide-react';
-import React, { useState, useMemo } from "react";
-import type { Video } from "@/types";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { AiSuggestions } from "@/components/ai-suggestions";
+import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import type { Video, Technology, Creator } from '@/types';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { AiSuggestions } from '@/components/ai-suggestions';
 
 const statusIcons: Record<Video['status'], React.ReactNode> = {
   'Not Started': <Circle className="h-4 w-4 text-muted-foreground" />,
@@ -21,6 +21,8 @@ const statusIcons: Record<Video['status'], React.ReactNode> = {
 
 export default function DashboardPage() {
   const [videos, setVideos] = useState<Video[]>(allVideos);
+  const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
+  const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
     setVideos(currentVideos =>
@@ -50,6 +52,132 @@ export default function DashboardPage() {
 
   const getVideoById = (id: string) => videos.find(v => v.id === id);
 
+  const renderVideoList = () => {
+    if (!selectedTech || !selectedCreator) return null;
+
+    const creatorVideos = selectedCreator.videos.map(v => getVideoById(v.id)).filter(Boolean) as Video[];
+
+    return (
+      <div>
+        <Button variant="ghost" onClick={() => setSelectedCreator(null)} className="mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Creators
+        </Button>
+        <div className="flex items-center gap-4 mb-6">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={selectedCreator.avatar} />
+              <AvatarFallback>{selectedCreator.name.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <div>
+                <h2 className="text-2xl font-bold font-headline">{selectedCreator.name}</h2>
+                <p className="text-muted-foreground">Videos on {selectedTech.name}</p>
+            </div>
+        </div>
+        <div className="space-y-4">
+          {creatorVideos.map((video) => (
+            <Card key={video.id} className="flex items-center justify-between p-4 group">
+              <div className="flex items-center gap-4">
+                <div className="w-40 h-24 bg-muted rounded-md overflow-hidden shrink-0">
+                  <Image data-ai-hint="code technology" src={video.thumbnail} alt={video.title} width={160} height={90} className="object-cover w-full h-full" />
+                </div>
+                <div>
+                  <p className="font-semibold text-lg">{video.title}</p>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="hidden md:block">
+                  {statusIcons[video.status]}
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">Set Status</Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCreatorGrid = () => {
+    if (!selectedTech) return null;
+    return (
+      <div>
+        <Button variant="ghost" onClick={() => setSelectedTech(null)} className="mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Technologies
+        </Button>
+        <div className="flex items-center gap-4 mb-6">
+            <selectedTech.icon className="h-10 w-10 text-primary icon-glow" />
+            <h2 className="text-3xl font-bold font-headline">{selectedTech.name}</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {selectedTech.creators.map(creator => (
+            <Card key={creator.id} className="cursor-pointer hover:shadow-lg hover:border-primary transition-all" onClick={() => setSelectedCreator(creator)}>
+              <CardHeader className="items-center text-center">
+                  <Avatar className="h-24 w-24 mb-4">
+                    <AvatarImage src={creator.avatar} />
+                    <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                <CardTitle>{creator.name}</CardTitle>
+                <CardDescription>{creator.videos.length} videos</CardDescription>
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTechnologyGrid = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+      {technologies.map(tech => (
+        <Card key={tech.id} className="cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-transform duration-300" onClick={() => setSelectedTech(tech)}>
+          <CardHeader>
+            <div className="flex items-center gap-4 mb-2">
+                <tech.icon className="h-10 w-10 text-primary icon-glow" />
+                <CardTitle className="text-2xl font-headline">{tech.name}</CardTitle>
+            </div>
+            <CardDescription>{tech.description}</CardDescription>
+          </CardHeader>
+          <CardContent>
+             <div className="flex -space-x-4 rtl:space-x-reverse">
+                {tech.creators.slice(0, 3).map(creator => (
+                    <Avatar key={creator.id} className="border-2 border-background">
+                        <AvatarImage src={creator.avatar} />
+                        <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                ))}
+                {tech.creators.length > 3 && (
+                     <a className="flex items-center justify-center w-10 h-10 text-xs font-medium text-white bg-gray-700 border-2 border-white rounded-full hover:bg-gray-600 dark:border-gray-800" href="#">+{tech.creators.length - 3}</a>
+                )}
+             </div>
+             <p className="text-sm text-muted-foreground mt-2">{tech.creators.length} creators</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+  
+  const renderLearningPath = () => {
+    if (selectedTech && selectedCreator) {
+        return renderVideoList();
+    }
+    if (selectedTech) {
+        return renderCreatorGrid();
+    }
+    return renderTechnologyGrid();
+  }
+
+
   return (
     <>
       <div className="flex items-center">
@@ -67,73 +195,16 @@ export default function DashboardPage() {
               <CardDescription>Explore technologies, creators, and videos to expand your universe of knowledge.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Accordion type="single" collapsible className="w-full">
-                {technologies.map((tech) => (
-                  <AccordionItem value={tech.id} key={tech.id}>
-                    <AccordionTrigger className="text-lg font-medium hover:no-underline">
-                      <div className="flex items-center gap-3">
-                        <tech.icon className="h-6 w-6 text-primary icon-glow" />
-                        {tech.name}
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pl-4">
-                      {tech.creators.map((creator) => (
-                        <div key={creator.id} className="mt-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <Avatar>
-                              <AvatarImage src={creator.avatar} />
-                              <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <h4 className="font-semibold">{creator.name}</h4>
-                          </div>
-                          <div className="border-l-2 border-primary/20 pl-6 ml-5">
-                            {creator.videos.map((video) => {
-                                const videoState = getVideoById(video.id);
-                                return (
-                                  <div key={video.id} className="flex items-center justify-between py-3 group">
-                                    <div className="flex items-center gap-4">
-                                      <div className="w-32 h-18 bg-muted rounded-md overflow-hidden shrink-0">
-                                         <Image data-ai-hint="code technology" src={video.thumbnail} alt={video.title} width={128} height={72} className="object-cover w-full h-full"/>
-                                      </div>
-                                      <div>
-                                        <p className="font-medium">{video.title}</p>
-                                        <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="hidden md:block">
-                                            {statusIcons[videoState?.status ?? 'Not Started']}
-                                        </div>
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="sm">Set Status</Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent>
-                                                <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                  </div>
-                                );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                {renderLearningPath()}
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="ai-suggestions">
-            <AiSuggestions
-                completedCourses={completedCourses}
-                subjectsOfInterest={subjectsOfInterest}
-                allVideos={videos}
-             />
+          <AiSuggestions
+            completedCourses={completedCourses}
+            subjectsOfInterest={subjectsOfInterest}
+            allVideos={videos}
+          />
         </TabsContent>
       </Tabs>
     </>

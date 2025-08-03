@@ -30,7 +30,7 @@ export default function ProfilePage() {
                 <AvatarImage src={`https://placehold.co/100x100/864DC7/FFFFFF/png?text=${userInitial}`} />
                 <AvatarFallback>{userInitial}</AvatarFallback>
             </Avatar>
-            <CardTitle className="text-2xl">{user?.email}</CardTitle>
+            <CardTitle className="text-2xl break-all">{user?.email}</CardTitle>
             {isAdmin && (
                 <CardDescription className="flex items-center gap-2 text-primary">
                 <CheckCircle className="h-4 w-4" /> Verified Creator

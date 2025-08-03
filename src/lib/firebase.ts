@@ -5,12 +5,13 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "your-api-key",
-  authDomain: "your-project-id.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project-id.appspot.com",
-  messagingSenderId: "your-sender-id",
-  appId: "your-app-id",
+  apiKey: "AIzaSyCThrk3C5Kd4zhIVTGyIMUk1UvrpC4QUwg",
+  authDomain: "astryde-app-b9181.firebaseapp.com",
+  projectId: "astryde-app-b9181",
+  storageBucket: "astryde-app-b9181.firebasestorage.app",
+  messagingSenderId: "359769473756",
+  appId: "1:359769473756:web:aa0f578417ad3a91b8aa19",
+  measurementId: "G-P20S6FJ1F0"
 };
 
 // Initialize Firebase

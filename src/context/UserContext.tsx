@@ -1,20 +1,23 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { Video, Technology, Creator } from '@/types';
-import { technologies as initialTechnologies, allVideos as initialAllVideos } from '@/lib/data';
+import { technologies as initialTechnologies } from '@/lib/data';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
+import { db } from '@/lib/firebase';
+import { collection, doc, getDocs, writeBatch, deleteDoc, setDoc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 
-const iconMap = {
+const iconMap: Record<string, React.ElementType> = {
   AppWindow,
   Cloud,
   Database,
   BrainCircuit,
 };
 
-const getIconComponent = (iconName: string) => {
-    return iconMap[iconName as keyof typeof iconMap] || BrainCircuit;
+const getIconComponent = (iconName?: string) => {
+    if (!iconName) return BrainCircuit;
+    return iconMap[iconName] || BrainCircuit;
 };
 
 interface User {
@@ -24,18 +27,18 @@ interface User {
 interface UserContextType {
   user: User | null;
   isAdmin: boolean;
-  videos: Video[];
-  allVideosForUser: Video[];
   technologies: Technology[];
+  allVideosForUser: Video[];
   login: (email: string) => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => void;
-  addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'>) => void;
-  addCreator: (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => void;
-  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => void;
-  deleteTechnology: (techId: string) => void;
-  deleteCreator: (techId: string, creatorId: string) => void;
-  deleteVideo: (techId: string, creatorId: string, videoId: string) => void;
+  addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & {iconName: string}) => Promise<void>;
+  addCreator: (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => Promise<void>;
+  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
+  deleteTechnology: (techId: string) => Promise<void>;
+  deleteCreator: (techId: string, creatorId: string) => Promise<void>;
+  deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
+  loading: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -43,41 +46,108 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [videos, setVideos] = useState<Video[]>(initialAllVideos);
-  const [technologies, setTechnologies] = useState<Technology[]>(() => {
-    if (typeof window === 'undefined') {
-        return initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string)}));
+  const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const seedDatabase = async () => {
+    console.log("Seeding database...");
+    const batch = writeBatch(db);
+    initialTechnologies.forEach(tech => {
+        const techDocRef = doc(db, "technologies", tech.id);
+        const { creators, ...techData } = tech;
+        const iconName = (tech.icon as any).displayName || 'BrainCircuit';
+        batch.set(techDocRef, { ...techData, iconName });
+
+        tech.creators.forEach(creator => {
+            const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
+            const { videos, ...creatorData } = creator;
+            batch.set(creatorDocRef, creatorData);
+
+            creator.videos.forEach(video => {
+                const videoDocRef = doc(db, `technologies/${tech.id}/creators/${creator.id}/videos`, video.id);
+                batch.set(videoDocRef, video);
+            });
+        });
+    });
+    await batch.commit();
+    console.log("Database seeded.");
+};
+
+const fetchTechnologies = useCallback(async (userEmail?: string) => {
+    setLoading(true);
+    const techCollection = collection(db, 'technologies');
+    const techSnapshot = await getDocs(techCollection);
+
+    if (techSnapshot.empty) {
+        await seedDatabase();
+        // re-fetch after seeding
+        const newTechSnapshot = await getDocs(techCollection);
+        return await processTechSnapshot(newTechSnapshot, userEmail);
+    } else {
+        return await processTechSnapshot(techSnapshot, userEmail);
     }
-    const storedTech = localStorage.getItem('technologies');
-    if (storedTech) {
-        const parsedTech = JSON.parse(storedTech);
-        return parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)}));
+  }, []);
+
+  const processTechSnapshot = async (techSnapshot: any, userEmail?: string): Promise<Technology[]> => {
+    const techList: Technology[] = [];
+    for (const techDoc of techSnapshot.docs) {
+        const techData = techDoc.data();
+        const tech: Technology = {
+            id: techDoc.id,
+            name: techData.name,
+            description: techData.description,
+            icon: getIconComponent(techData.iconName),
+            creators: [],
+        };
+
+        const creatorsCollection = collection(db, `technologies/${tech.id}/creators`);
+        const creatorsSnapshot = await getDocs(creatorsCollection);
+        for (const creatorDoc of creatorsSnapshot.docs) {
+            const creatorData = creatorDoc.data();
+            const creator: Creator = {
+                id: creatorDoc.id,
+                name: creatorData.name,
+                avatar: creatorData.avatar,
+                videos: [],
+            };
+
+            const videosCollection = collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`);
+            const videosSnapshot = await getDocs(videosCollection);
+            const userProgress = userEmail ? (await getDoc(doc(db, `users/${userEmail}`))).data()?.progress || {} : {};
+
+            for (const videoDoc of videosSnapshot.docs) {
+                const videoData = videoDoc.data();
+                const video: Video = {
+                    id: videoDoc.id,
+                    title: videoData.title,
+                    duration: videoData.duration,
+                    thumbnail: videoData.thumbnail,
+                    url: videoData.url,
+                    status: userProgress[videoDoc.id] || 'Not Started',
+                };
+                creator.videos.push(video);
+            }
+            tech.creators.push(creator);
+        }
+        techList.push(tech);
     }
-    return initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}));
-  });
+    setTechnologies(techList);
+    setLoading(false);
+    return techList;
+  }
 
   useEffect(() => {
     const storedUser = sessionStorage.getItem('user');
     if (storedUser) {
-      const parsedUser: User = JSON.parse(storedUser);
-      login(parsedUser.email);
-    }
-  }, []);
-  
-  useEffect(() => {
-    const storedTech = localStorage.getItem('technologies');
-    if(storedTech) {
-        const parsedTech = JSON.parse(storedTech);
-        setTechnologies(parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)})));
+        const parsedUser: User = JSON.parse(storedUser);
+        login(parsedUser.email);
     } else {
-        const technologiesWithIcons = initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}));
-        setTechnologies(technologiesWithIcons);
-        const storableTech = technologiesWithIcons.map(t => ({...t, iconName: (t.icon as any).displayName || (t.icon as any).name, icon: undefined }));
-        localStorage.setItem('technologies', JSON.stringify(storableTech));
+        fetchTechnologies().finally(() => setLoading(false));
     }
-  }, []);
+  }, [fetchTechnologies]);
 
-  const login = (email: string) => {
+  const login = async (email: string) => {
+    setLoading(true);
     const newUser = { email };
     setUser(newUser);
     sessionStorage.setItem('user', JSON.stringify(newUser));
@@ -87,137 +157,78 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     } else {
       setIsAdmin(false);
     }
-
-    const storedVideos = sessionStorage.getItem(`video-progress-${email}`);
-    if (storedVideos) {
-      setVideos(JSON.parse(storedVideos));
-    } else {
-      setVideos(technologies.flatMap(tech => tech.creators.flatMap(c => c.videos)));
-    }
+    await fetchTechnologies(email);
+    setLoading(false);
   };
 
   const logout = () => {
     setUser(null);
     setIsAdmin(false);
     sessionStorage.removeItem('user');
+    fetchTechnologies().finally(() => setLoading(false));
   };
   
-  const updateTechnologiesInStateAndStorage = (newTechnologies: Technology[]) => {
-    const technologiesWithIcons = newTechnologies.map(t => {
-      const iconName = (t.icon as any).displayName || (t.icon as any).name;
-      if (!iconName && process.env.NODE_ENV === 'development') {
-        console.warn(`Icon for technology "${t.name}" has no displayName or name.`);
-      }
-      return {
-        ...t, 
-        icon: getIconComponent(iconName), 
-        iconName: iconName
-      };
-    });
-    setTechnologies(technologiesWithIcons);
-    const storableTech = technologiesWithIcons.map(t => ({...t, iconName: (t.icon as any).displayName || (t.icon as any).name, icon: undefined }));
-    localStorage.setItem('technologies', JSON.stringify(storableTech));
-  }
+  const updateVideoStatus = async (videoId: string, status: Video['status']) => {
+    if (!user) return;
 
-  const updateVideoStatus = (videoId: string, status: Video['status']) => {
-    const newVideos = videos.map(video =>
-      video.id === videoId ? { ...video, status } : video
-    );
-    setVideos(newVideos);
+    setTechnologies(prevTechs => prevTechs.map(tech => ({
+      ...tech,
+      creators: tech.creators.map(creator => ({
+        ...creator,
+        videos: creator.videos.map(video => 
+          video.id === videoId ? { ...video, status } : video
+        )
+      }))
+    })));
 
-    const newTechnologies = technologies.map(tech => ({
-        ...tech,
-        creators: tech.creators.map(creator => ({
-            ...creator,
-            videos: creator.videos.map(video => 
-                video.id === videoId ? { ...video, status } : video
-            )
-        }))
-    }));
-    updateTechnologiesInStateAndStorage(newTechnologies);
-
-    if (user) {
-      sessionStorage.setItem(`video-progress-${user.email}`, JSON.stringify(newVideos));
+    const userRef = doc(db, `users/${user.email}`);
+    try {
+        await updateDoc(userRef, {
+            [`progress.${videoId}`]: status
+        });
+    } catch (e) {
+        // If the document or progress field doesn't exist, create it.
+        await setDoc(userRef, { progress: { [videoId]: status } }, { merge: true });
     }
   };
 
-  const addTechnology = (tech: Omit<Technology, 'id' | 'creators' | 'icon'>) => {
-    const newTechnology: Technology = {
-        ...tech,
-        id: `tech-${Date.now()}`,
-        icon: BrainCircuit,
-        creators: [],
+  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & {iconName: string}) => {
+    const id = `tech-${Date.now()}`;
+    const { iconName, ...rest } = tech;
+    const newTechnology = {
+        ...rest,
+        id,
+        iconName,
     };
-    const newTechnologies = [...technologies, newTechnology];
-    updateTechnologiesInStateAndStorage(newTechnologies);
+    await setDoc(doc(db, "technologies", id), newTechnology);
+    await fetchTechnologies(user?.email);
   };
 
-  const addCreator = (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => {
-      const newCreator: Creator = {
-          ...creator,
-          id: `creator-${Date.now()}`,
-          videos: [],
-      };
-      const newTechnologies = technologies.map(tech => 
-          tech.id === techId ? { ...tech, creators: [...tech.creators, newCreator] } : tech
-      );
-      updateTechnologiesInStateAndStorage(newTechnologies);
+  const addCreator = async (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => {
+      const id = `creator-${Date.now()}`;
+      await setDoc(doc(db, `technologies/${techId}/creators`, id), creator);
+      await fetchTechnologies(user?.email);
   };
 
-  const addVideo = (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
-      const newVideo: Video = {
-          ...video,
-          id: `video-${Date.now()}`,
-          status: 'Not Started',
-      };
-      const newTechnologies = technologies.map(tech => 
-          tech.id === techId ? {
-              ...tech,
-              creators: tech.creators.map(creator => 
-                  creator.id === creatorId ? { ...creator, videos: [...creator.videos, newVideo] } : creator
-              )
-          } : tech
-      );
-      updateTechnologiesInStateAndStorage(newTechnologies);
+  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
+      const id = `video-${Date.now()}`;
+      await setDoc(doc(db, `technologies/${techId}/creators/${creatorId}/videos`, id), { ...video, status: 'Not Started' });
+      await fetchTechnologies(user?.email);
   };
 
-  const deleteTechnology = (techId: string) => {
-    const newTechnologies = technologies.filter(tech => tech.id !== techId);
-    updateTechnologiesInStateAndStorage(newTechnologies);
+  const deleteTechnology = async (techId: string) => {
+    await deleteDoc(doc(db, "technologies", techId));
+    await fetchTechnologies(user?.email);
   };
 
-  const deleteCreator = (techId: string, creatorId: string) => {
-    const newTechnologies = technologies.map(tech => {
-        if(tech.id === techId) {
-            return {
-                ...tech,
-                creators: tech.creators.filter(c => c.id !== creatorId)
-            }
-        }
-        return tech;
-    });
-    updateTechnologiesInStateAndStorage(newTechnologies);
+  const deleteCreator = async (techId: string, creatorId: string) => {
+    await deleteDoc(doc(db, `technologies/${techId}/creators`, creatorId));
+    await fetchTechnologies(user?.email);
   };
 
-  const deleteVideo = (techId: string, creatorId: string, videoId: string) => {
-    const newTechnologies = technologies.map(tech => {
-        if(tech.id === techId) {
-            return {
-                ...tech,
-                creators: tech.creators.map(creator => {
-                    if(creator.id === creatorId) {
-                        return {
-                            ...creator,
-                            videos: creator.videos.filter(v => v.id !== videoId)
-                        }
-                    }
-                    return creator;
-                })
-            }
-        }
-        return tech;
-    });
-    updateTechnologiesInStateAndStorage(newTechnologies);
+  const deleteVideo = async (techId: string, creatorId: string, videoId: string) => {
+    await deleteDoc(doc(db, `technologies/${techId}/creators/${creatorId}/videos`, videoId));
+    await fetchTechnologies(user?.email);
   };
 
   const allVideosForUser = technologies.flatMap(tech => 
@@ -229,9 +240,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     <UserContext.Provider value={{ 
         user, 
         isAdmin, 
-        videos, 
-        allVideosForUser, 
         technologies,
+        allVideosForUser, 
         login, 
         logout, 
         updateVideoStatus,
@@ -240,7 +250,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         addVideo,
         deleteTechnology,
         deleteCreator,
-        deleteVideo
+        deleteVideo,
+        loading
     }}>
       {children}
     </UserContext.Provider>

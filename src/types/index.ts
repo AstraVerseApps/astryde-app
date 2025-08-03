@@ -5,6 +5,7 @@ export type Video = {
   title: string;
   duration: string;
   thumbnail: string;
+  url: string;
   status: 'Completed' | 'In Progress' | 'Not Started';
   creator?: string;
   technology?: string;

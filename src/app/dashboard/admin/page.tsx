@@ -48,15 +48,54 @@ export default function AdminPage() {
     setSelectedCreatorForNewVideo('');
   };
 
-  const handleDelete = () => {
+  const handleAddTechnology = async () => {
+    if (newTechName && newTechDesc) {
+      await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
+      setNewTechName('');
+      setNewTechDesc('');
+      router.refresh();
+    }
+  };
+
+  const handleAddCreator = async () => {
+    if (selectedTechForNewCreator && newCreatorName) {
+      await addCreator(selectedTechForNewCreator, { name: newCreatorName, avatar: newCreatorAvatar || 'https://placehold.co/100x100' });
+      setNewCreatorName('');
+      setNewCreatorAvatar('');
+      setSelectedTechForNewCreator('');
+      router.refresh();
+    }
+  };
+
+  const handleAddVideo = async () => {
+    if (selectedTechForNewVideo && selectedCreatorForNewVideo && newVideoTitle) {
+      await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
+        title: newVideoTitle,
+        duration: newVideoDuration,
+        thumbnail: newVideoThumbnail || 'https://placehold.co/1280x720',
+        url: newVideoUrl
+      });
+      setNewVideoTitle('');
+      setNewVideoDuration('');
+      setNewVideoThumbnail('');
+      setNewVideoUrl('');
+      setSelectedTechForNewVideo('');
+      setSelectedCreatorForNewVideo('');
+      setCreatorsForTech([]);
+      router.refresh();
+    }
+  };
+
+
+  const handleDelete = async () => {
     if (deleteType === 'technology' && selectedTechForDelete) {
-        deleteTechnology(selectedTechForDelete);
+        await deleteTechnology(selectedTechForDelete);
         setSelectedTechForDelete('');
     } else if (deleteType === 'creator' && selectedCreatorForDelete) {
-        deleteCreator(selectedTechForDelete, selectedCreatorForDelete);
+        await deleteCreator(selectedTechForDelete, selectedCreatorForDelete);
         setSelectedCreatorForDelete('');
     } else if (deleteType === 'video' && selectedVideoForDelete) {
-        deleteVideo(selectedTechForDelete, selectedCreatorForDelete, selectedVideoForDelete);
+        await deleteVideo(selectedTechForDelete, selectedCreatorForDelete, selectedVideoForDelete);
         setSelectedVideoForDelete('');
     }
     setDeleteType('');
@@ -125,15 +164,15 @@ export default function AdminPage() {
                     <CardContent className="space-y-4 flex-grow">
                         <div className="space-y-2">
                             <Label htmlFor="tech-name">Technology Name</Label>
-                            <Input id="tech-name" placeholder="e.g. Quantum Computing" />
+                            <Input id="tech-name" placeholder="e.g. Quantum Computing" value={newTechName} onChange={e => setNewTechName(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="tech-desc">Description</Label>
-                            <Input id="tech-desc" placeholder="A brief summary" />
+                            <Input id="tech-desc" placeholder="A brief summary" value={newTechDesc} onChange={e => setNewTechDesc(e.target.value)} />
                         </div>
                     </CardContent>
                     <div className="p-6 pt-0">
-                        <Button className="w-full">
+                        <Button className="w-full" onClick={handleAddTechnology}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Add Technology
                         </Button>
@@ -148,7 +187,7 @@ export default function AdminPage() {
                     <CardContent className="space-y-4 flex-grow">
                         <div className="space-y-2">
                             <Label htmlFor="tech-select-creator">Technology</Label>
-                            <Select>
+                            <Select value={selectedTechForNewCreator} onValueChange={setSelectedTechForNewCreator}>
                                 <SelectTrigger id="tech-select-creator">
                                     <SelectValue placeholder="Select a technology" />
                                 </SelectTrigger>
@@ -161,15 +200,15 @@ export default function AdminPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="creator-name">Creator Name</Label>
-                            <Input id="creator-name" placeholder="e.g. Dr. Nova" />
+                            <Input id="creator-name" placeholder="e.g. Dr. Nova" value={newCreatorName} onChange={e => setNewCreatorName(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="creator-avatar">Avatar URL</Label>
-                            <Input id="creator-avatar" placeholder="https://placehold.co/100x100" />
+                            <Input id="creator-avatar" placeholder="https://placehold.co/100x100" value={newCreatorAvatar} onChange={e => setNewCreatorAvatar(e.target.value)} />
                         </div>
                     </CardContent>
                     <div className="p-6 pt-0">
-                        <Button className="w-full">
+                        <Button className="w-full" onClick={handleAddCreator}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Add Creator
                         </Button>
@@ -185,7 +224,7 @@ export default function AdminPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="tech-select-video-add">Technology</Label>
-                                <Select onValueChange={handleTechChangeForVideo}>
+                                <Select value={selectedTechForNewVideo} onValueChange={handleTechChangeForVideo}>
                                     <SelectTrigger id="tech-select-video-add">
                                         <SelectValue placeholder="Select" />
                                     </SelectTrigger>
@@ -198,7 +237,7 @@ export default function AdminPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="creator-select-video-add">Creator</Label>
-                                <Select disabled={creatorsForTech.length === 0} onValueChange={setSelectedCreatorForNewVideo}>
+                                <Select value={selectedCreatorForNewVideo} disabled={creatorsForTech.length === 0} onValueChange={setSelectedCreatorForNewVideo}>
                                     <SelectTrigger id="creator-select-video-add">
                                         <SelectValue placeholder="Select" />
                                     </SelectTrigger>
@@ -212,23 +251,23 @@ export default function AdminPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="video-title">Video Title</Label>
-                            <Input id="video-title" placeholder="e.g. Intro to Warp Drives" />
+                            <Input id="video-title" placeholder="e.g. Intro to Warp Drives" value={newVideoTitle} onChange={e => setNewVideoTitle(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="video-duration">Duration</Label>
-                            <Input id="video-duration" placeholder="e.g. 42:10" />
+                            <Input id="video-duration" placeholder="e.g. 42:10" value={newVideoDuration} onChange={e => setNewVideoDuration(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="video-thumbnail">Thumbnail URL</Label>
-                            <Input id="video-thumbnail" placeholder="https://placehold.co/1280x720" />
+                            <Input id="video-thumbnail" placeholder="https://placehold.co/1280x720" value={newVideoThumbnail} onChange={e => setNewVideoThumbnail(e.target.value)}/>
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="video-url">YouTube Video URL</Label>
-                            <Input id="video-url" placeholder="https://www.youtube.com/watch?v=..." />
+                            <Input id="video-url" placeholder="https://www.youtube.com/watch?v=..." value={newVideoUrl} onChange={e => setNewVideoUrl(e.target.value)} />
                         </div>
                     </CardContent>
                      <div className="p-6 pt-0">
-                        <Button className="w-full">
+                        <Button className="w-full" onClick={handleAddVideo}>
                             <UploadCloud className="mr-2 h-4 w-4" />
                             Add Video
                         </Button>

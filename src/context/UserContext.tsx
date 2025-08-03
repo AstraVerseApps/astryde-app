@@ -4,7 +4,18 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { Video, Technology, Creator } from '@/types';
 import { technologies as initialTechnologies, allVideos as initialAllVideos } from '@/lib/data';
-import { BrainCircuit } from 'lucide-react';
+import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
+
+const iconMap = {
+  AppWindow,
+  Cloud,
+  Database,
+  BrainCircuit,
+};
+
+const getIconComponent = (iconName: string) => {
+    return iconMap[iconName as keyof typeof iconMap] || BrainCircuit;
+};
 
 interface User {
   email: string;
@@ -33,7 +44,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [videos, setVideos] = useState<Video[]>(initialAllVideos);
-  const [technologies, setTechnologies] = useState<Technology[]>(initialTechnologies);
+  const [technologies, setTechnologies] = useState<Technology[]>(initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string)})));
 
   useEffect(() => {
     const storedUser = sessionStorage.getItem('user');
@@ -47,9 +58,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (user) {
         const storedTech = sessionStorage.getItem(`technologies-${user.email}`);
         if(storedTech) {
-            setTechnologies(JSON.parse(storedTech));
+            const parsedTech = JSON.parse(storedTech);
+            setTechnologies(parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)})));
         } else {
-            setTechnologies(initialTechnologies);
+            setTechnologies(initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: t.icon.displayName})));
         }
     }
   }, [user]);
@@ -74,9 +86,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     const storedTech = sessionStorage.getItem(`technologies-${email}`);
     if(storedTech) {
-        setTechnologies(JSON.parse(storedTech));
+        const parsedTech = JSON.parse(storedTech);
+        setTechnologies(parsedTech.map((t: any) => ({...t, icon: getIconComponent(t.iconName)})));
     } else {
-        setTechnologies(initialTechnologies);
+        const technologiesWithIcons = initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}))
+        setTechnologies(technologiesWithIcons);
     }
   };
 
@@ -84,9 +98,18 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setIsAdmin(false);
     setVideos(initialAllVideos);
-    setTechnologies(initialTechnologies);
+    const technologiesWithIcons = initialTechnologies.map(t => ({...t, icon: getIconComponent(t.icon as unknown as string), iconName: (t.icon as any).displayName || (t.icon as any).name}))
+    setTechnologies(technologiesWithIcons);
     sessionStorage.removeItem('user');
   };
+  
+  const updateTechnologiesInStateAndStorage = (newTechnologies: Technology[]) => {
+    setTechnologies(newTechnologies);
+    if (user) {
+      const storableTech = newTechnologies.map(t => ({...t, iconName: (t.icon as any).displayName || (t.icon as any).name, icon: undefined }));
+      sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(storableTech));
+    }
+  }
 
   const updateVideoStatus = (videoId: string, status: Video['status']) => {
     const newVideos = videos.map(video =>
@@ -103,11 +126,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             )
         }))
     }));
-    setTechnologies(newTechnologies);
+    updateTechnologiesInStateAndStorage(newTechnologies);
 
     if (user) {
       sessionStorage.setItem(`video-progress-${user.email}`, JSON.stringify(newVideos));
-      sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
     }
   };
 
@@ -119,10 +141,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         creators: [],
     };
     const newTechnologies = [...technologies, newTechnology];
-    setTechnologies(newTechnologies);
-    if (user) {
-        sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
-    }
+    updateTechnologiesInStateAndStorage(newTechnologies);
   };
 
   const addCreator = (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => {
@@ -134,10 +153,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       const newTechnologies = technologies.map(tech => 
           tech.id === techId ? { ...tech, creators: [...tech.creators, newCreator] } : tech
       );
-      setTechnologies(newTechnologies);
-      if (user) {
-          sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
-      }
+      updateTechnologiesInStateAndStorage(newTechnologies);
   };
 
   const addVideo = (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
@@ -154,18 +170,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
               )
           } : tech
       );
-      setTechnologies(newTechnologies);
-      if (user) {
-          sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
-      }
+      updateTechnologiesInStateAndStorage(newTechnologies);
   };
 
   const deleteTechnology = (techId: string) => {
     const newTechnologies = technologies.filter(tech => tech.id !== techId);
-    setTechnologies(newTechnologies);
-    if(user) {
-        sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
-    }
+    updateTechnologiesInStateAndStorage(newTechnologies);
   };
 
   const deleteCreator = (techId: string, creatorId: string) => {
@@ -178,10 +188,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
         return tech;
     });
-    setTechnologies(newTechnologies);
-    if(user) {
-        sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
-    }
+    updateTechnologiesInStateAndStorage(newTechnologies);
   };
 
   const deleteVideo = (techId: string, creatorId: string, videoId: string) => {
@@ -202,10 +209,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
         return tech;
     });
-    setTechnologies(newTechnologies);
-    if(user) {
-        sessionStorage.setItem(`technologies-${user.email}`, JSON.stringify(newTechnologies));
-    }
+    updateTechnologiesInStateAndStorage(newTechnologies);
   };
 
   const allVideosForUser = technologies.flatMap(tech => 

@@ -1,6 +1,11 @@
 import type { Technology } from '@/types';
 import { AppWindow, Cloud, Database, BrainCircuit } from 'lucide-react';
 
+AppWindow.displayName = 'AppWindow';
+Cloud.displayName = 'Cloud';
+Database.displayName = 'Database';
+BrainCircuit.displayName = 'BrainCircuit';
+
 export const technologies: Technology[] = [
   {
     id: 'frontend',

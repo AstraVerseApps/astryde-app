@@ -32,8 +32,8 @@ export default function AdminPage() {
         {/* Add New Technology */}
         <Card>
           <CardHeader>
-            <CardTitle>Step 1: Add New Technology</CardTitle>
-            <CardDescription>Add a new technology category to the learning galaxy. This is the first step before adding creators or videos.</CardDescription>
+            <CardTitle>Add New Technology</CardTitle>
+            <CardDescription>Add a new technology category to the learning galaxy.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -54,7 +54,7 @@ export default function AdminPage() {
         {/* Add New Creator */}
         <Card>
           <CardHeader>
-            <CardTitle>Step 2: Add New Creator</CardTitle>
+            <CardTitle>Add New Creator</CardTitle>
             <CardDescription>Add a new content creator and assign them to a technology.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -89,7 +89,7 @@ export default function AdminPage() {
         {/* Add New Video */}
         <Card>
             <CardHeader>
-                <CardTitle>Step 3: Add New Video</CardTitle>
+                <CardTitle>Add New Video</CardTitle>
                 <CardDescription>Add a new video from a creator to a specific technology.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

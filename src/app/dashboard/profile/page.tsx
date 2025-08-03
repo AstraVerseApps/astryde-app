@@ -30,7 +30,7 @@ export default function ProfilePage() {
                 <AvatarImage src={`https://placehold.co/100x100/864DC7/FFFFFF/png?text=${userInitial}`} />
                 <AvatarFallback>{userInitial}</AvatarFallback>
             </Avatar>
-            <CardTitle className="text-2xl">Stellar Voyager</CardTitle>
+            <CardTitle className="text-2xl">{user?.email}</CardTitle>
             {isAdmin && (
                 <CardDescription className="flex items-center gap-2 text-primary">
                 <CheckCircle className="h-4 w-4" /> Verified Creator
@@ -39,7 +39,7 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-sm text-muted-foreground">
-              Exploring the vast universe of technology, one commit at a time.
+              
             </p>
           </CardContent>
         </Card>
@@ -51,7 +51,7 @@ export default function ProfilePage() {
             <CardContent className="space-y-6">
                 <div className="grid gap-2">
                     <Label htmlFor="username">Username</Label>
-                    <Input id="username" defaultValue="Stellar Voyager" />
+                    <Input id="username" placeholder="Your cosmic handle" />
                 </div>
                 <div className="grid gap-2">
                     <Label htmlFor="email">Email</Label>

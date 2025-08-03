@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { AstrydeLogo } from '@/components/icons';
@@ -27,7 +28,6 @@ import {
   LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
 
@@ -172,9 +172,11 @@ export default function DashboardLayout({
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Logout</span>
+              <DropdownMenuItem asChild>
+                <Link href="/">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Logout</span>
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -186,4 +188,3 @@ export default function DashboardLayout({
     </div>
   );
 }
-

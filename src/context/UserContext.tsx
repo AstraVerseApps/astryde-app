@@ -50,8 +50,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     initialTechnologies.forEach(tech => {
         const techDocRef = doc(db, "technologies", tech.id);
-        const { creators, ...techData } = tech;
-        const iconName = (tech.icon as any).displayName || 'BrainCircuit';
+        const { creators, icon, ...techData } = tech;
+        const iconName = (icon as any).displayName || 'BrainCircuit';
         batch.set(techDocRef, { ...techData, iconName });
 
         tech.creators.forEach(creator => {

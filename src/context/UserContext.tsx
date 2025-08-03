@@ -19,19 +19,20 @@ const getIconComponent = (iconName?: string) => {
     return iconMap[iconName];
 };
 
-const processInitialData = (technologies: Technology[]): Technology[] => {
+const processData = (technologies: any[]): Technology[] => {
     return technologies.map(tech => ({
         ...tech,
-        icon: getIconComponent((tech.icon as any).displayName),
-        creators: tech.creators.map(creator => ({
+        icon: getIconComponent(typeof tech.icon === 'string' ? tech.icon : (tech.icon as any)?.displayName),
+        creators: tech.creators.map((creator: any) => ({
             ...creator,
-            videos: creator.videos.map(video => ({
+            videos: creator.videos.map((video: any) => ({
                 ...video,
-                status: 'Not Started' 
+                status: video.status || 'Not Started' 
             }))
         }))
     }));
 };
+
 
 interface UserContextType {
   user: { email: string; displayName: string; photoURL?: string } | null;
@@ -55,7 +56,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<{ email: string; displayName: string; photoURL?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [technologies, setTechnologies] = useState<Technology[]>(() => processInitialData(initialTechnologies));
+  const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
@@ -72,15 +73,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
         if (storedTech) {
             const parsedTech = JSON.parse(storedTech);
-            setTechnologies(processInitialData(parsedTech));
+            setTechnologies(processData(parsedTech));
         } else {
-            const initialData = processInitialData(initialTechnologies);
-            setTechnologies(initialData);
-            localStorage.setItem('astryde-tech-data', JSON.stringify(initialData.map(t => ({...t, icon: (t.icon as any).displayName}))));
+            // This is to handle the case where there is no data in local storage
+            // We map display names to the initial data so the icon components are functions not strings
+            const initialData = initialTechnologies.map(t => ({...t, icon: (t.icon as any).displayName}))
+            setTechnologies(processData(initialTechnologies));
+            localStorage.setItem('astryde-tech-data', JSON.stringify(initialData));
         }
     } catch (e) {
         console.error("Error loading data from local storage", e);
-        const initialData = processInitialData(initialTechnologies);
+        const initialData = processData(initialTechnologies);
         setTechnologies(initialData);
     } finally {
         setLoading(false);
@@ -118,7 +121,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         )
       }))
     }));
-    setTechnologies(newTechs);
+    setTechnologies(processData(newTechs));
     updateLocalStorage(newTechs);
   };
 
@@ -130,7 +133,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         icon: getIconComponent(tech.iconName),
     };
     const newTechs = [...technologies, newTechnology];
-    setTechnologies(newTechs);
+    setTechnologies(processData(newTechs));
     updateLocalStorage(newTechs);
   };
 
@@ -146,7 +149,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           }
           return tech;
       });
-      setTechnologies(newTechs);
+      setTechnologies(processData(newTechs));
       updateLocalStorage(newTechs);
   };
 
@@ -170,13 +173,13 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           }
           return tech;
       });
-      setTechnologies(newTechs);
+      setTechnologies(processData(newTechs));
       updateLocalStorage(newTechs);
   };
 
   const deleteTechnology = async (techId: string) => {
     const newTechs = technologies.filter(tech => tech.id !== techId);
-    setTechnologies(newTechs);
+    setTechnologies(processData(newTechs));
     updateLocalStorage(newTechs);
   };
 
@@ -187,7 +190,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       }
       return tech;
     });
-    setTechnologies(newTechs);
+    setTechnologies(processData(newTechs));
     updateLocalStorage(newTechs);
   };
 
@@ -206,7 +209,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       }
       return tech;
     });
-    setTechnologies(newTechs);
+    setTechnologies(processData(newTechs));
     updateLocalStorage(newTechs);
   };
 
@@ -244,3 +247,4 @@ export const useUser = () => {
   }
   return context;
 };
+

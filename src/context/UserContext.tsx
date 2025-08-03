@@ -52,7 +52,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         const techDocRef = doc(db, "technologies", tech.id);
         const { creators, icon, ...techData } = tech;
         const iconName = (icon as any).displayName || 'BrainCircuit';
-        batch.set(techDocRef, { ...techData, iconName });
+        batch.set(techDocRef, { name: techData.name, description: techData.description, id: techData.id, iconName });
 
         tech.creators.forEach(creator => {
             const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
@@ -140,7 +140,6 @@ const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
         setUser(null);
         setIsAdmin(false);
         await fetchTechnologies(null);
-        setLoading(false);
       }
     });
 

@@ -12,7 +12,10 @@ import { CheckCircle, Edit } from "lucide-react";
 
 export default function ProfilePage() {
     const { user, isAdmin } = useUser();
-    const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
+    const userInitial = user?.email?.charAt(0).toUpperCase() || user?.displayName?.charAt(0).toUpperCase() || 'U';
+    const userAvatar = user?.photoURL;
+    const userDisplayName = user?.displayName || user?.email;
+
 
   return (
     <>
@@ -27,10 +30,10 @@ export default function ProfilePage() {
         <Card className="md:col-span-1">
           <CardHeader className="items-center">
             <Avatar className="h-24 w-24 mb-4">
-                <AvatarImage src={`https://placehold.co/100x100/864DC7/FFFFFF/png?text=${userInitial}`} />
+                <AvatarImage src={userAvatar || `https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=${userInitial}`} />
                 <AvatarFallback>{userInitial}</AvatarFallback>
             </Avatar>
-            <CardTitle className="text-2xl break-all">{user?.email}</CardTitle>
+            <CardTitle className="text-2xl break-all">{userDisplayName}</CardTitle>
             {isAdmin && (
                 <CardDescription className="flex items-center gap-2 text-primary">
                 <CheckCircle className="h-4 w-4" /> Verified Creator
@@ -50,12 +53,16 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-6">
                 <div className="grid gap-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input id="username" placeholder="Your cosmic handle" />
+                    <Label htmlFor="username">Display Name</Label>
+                    <Input id="username" placeholder="Your cosmic handle" defaultValue={user?.displayName || ''} />
                 </div>
                 <div className="grid gap-2">
                     <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" defaultValue={user?.email} />
+                    <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
+                </div>
+                 <div className="grid gap-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input id="phone" type="tel" defaultValue={user?.phoneNumber || ''} disabled />
                 </div>
                 {isAdmin && (
                     <div className="flex items-center justify-between rounded-lg border p-4">

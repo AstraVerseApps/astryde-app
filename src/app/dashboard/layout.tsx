@@ -29,6 +29,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
 
@@ -37,8 +38,31 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isAdmin, logout } = useUser();
-  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
+  const { user, isAdmin, logout, loading } = useUser();
+  const router = useRouter();
+  const userInitial = user?.email?.charAt(0).toUpperCase() || user?.displayName?.charAt(0).toUpperCase() || 'U';
+  const userAvatar = user?.photoURL;
+  const userDisplayName = user?.displayName || user?.email;
+
+  React.useEffect(() => {
+    if (!loading && !user) {
+      router.push('/');
+    }
+  }, [user, loading, router]);
+  
+  if (loading) {
+    return (
+        <div className="flex items-center justify-center min-h-screen">
+            <AstrydeLogo />
+        </div>
+    )
+  }
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/');
+  }
+
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
@@ -157,14 +181,14 @@ export default function DashboardLayout({
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar>
-                  <AvatarImage src={"https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=U"} />
+                  <AvatarImage src={userAvatar || `https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=${userInitial}`} />
                   <AvatarFallback>{userInitial}</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Toggle user menu</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel className="break-all">{user?.email || 'My Account'}</DropdownMenuLabel>
+              <DropdownMenuLabel className="break-all">{userDisplayName}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
@@ -179,11 +203,9 @@ export default function DashboardLayout({
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild onClick={logout}>
-                <Link href="/">
+              <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Logout</span>
-                </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

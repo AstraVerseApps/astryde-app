@@ -5,8 +5,9 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import type { Video, Technology, Creator } from '@/types';
 import { technologies as initialTechnologies } from '@/lib/data';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, writeBatch, deleteDoc, setDoc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { collection, doc, getDocs, writeBatch, deleteDoc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 const iconMap: Record<string, React.ElementType> = {
   AppWindow,
@@ -20,16 +21,11 @@ const getIconComponent = (iconName?: string) => {
     return iconMap[iconName] || BrainCircuit;
 };
 
-interface User {
-  email: string;
-}
-
 interface UserContextType {
   user: User | null;
   isAdmin: boolean;
   technologies: Technology[];
   allVideosForUser: Video[];
-  login: (email: string) => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => void;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & {iconName: string}) => Promise<void>;
@@ -73,22 +69,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     console.log("Database seeded.");
 };
 
-const fetchTechnologies = useCallback(async (userEmail?: string) => {
+const fetchTechnologies = useCallback(async (userEmail?: string | null) => {
     setLoading(true);
     const techCollection = collection(db, 'technologies');
     const techSnapshot = await getDocs(techCollection);
 
     if (techSnapshot.empty) {
         await seedDatabase();
-        // re-fetch after seeding
         const newTechSnapshot = await getDocs(techCollection);
-        return await processTechSnapshot(newTechSnapshot, userEmail);
+        await processTechSnapshot(newTechSnapshot, userEmail);
     } else {
-        return await processTechSnapshot(techSnapshot, userEmail);
+        await processTechSnapshot(techSnapshot, userEmail);
     }
   }, []);
 
-  const processTechSnapshot = async (techSnapshot: any, userEmail?: string): Promise<Technology[]> => {
+  const processTechSnapshot = async (techSnapshot: any, userEmail?: string | null): Promise<void> => {
     const techList: Technology[] = [];
     for (const techDoc of techSnapshot.docs) {
         const techData = techDoc.data();
@@ -133,43 +128,32 @@ const fetchTechnologies = useCallback(async (userEmail?: string) => {
     }
     setTechnologies(techList);
     setLoading(false);
-    return techList;
   }
 
   useEffect(() => {
-    const storedUser = sessionStorage.getItem('user');
-    if (storedUser) {
-        const parsedUser: User = JSON.parse(storedUser);
-        login(parsedUser.email);
-    } else {
-        fetchTechnologies().finally(() => setLoading(false));
-    }
+    setLoading(true);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUser(user);
+        setIsAdmin(user.email === 'astrydeapp@gmail.com');
+        await fetchTechnologies(user.email);
+      } else {
+        setUser(null);
+        setIsAdmin(false);
+        await fetchTechnologies(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [fetchTechnologies]);
 
-  const login = async (email: string) => {
-    setLoading(true);
-    const newUser = { email };
-    setUser(newUser);
-    sessionStorage.setItem('user', JSON.stringify(newUser));
-
-    if (email === 'astrydeapp@gmail.com') {
-      setIsAdmin(true);
-    } else {
-      setIsAdmin(false);
-    }
-    await fetchTechnologies(email);
-    setLoading(false);
-  };
-
-  const logout = () => {
-    setUser(null);
-    setIsAdmin(false);
-    sessionStorage.removeItem('user');
-    fetchTechnologies().finally(() => setLoading(false));
+  const logout = async () => {
+    await auth.signOut();
   };
   
   const updateVideoStatus = async (videoId: string, status: Video['status']) => {
-    if (!user) return;
+    if (!user || !user.email) return;
 
     setTechnologies(prevTechs => prevTechs.map(tech => ({
       ...tech,
@@ -187,7 +171,6 @@ const fetchTechnologies = useCallback(async (userEmail?: string) => {
             [`progress.${videoId}`]: status
         });
     } catch (e) {
-        // If the document or progress field doesn't exist, create it.
         await setDoc(userRef, { progress: { [videoId]: status } }, { merge: true });
     }
   };
@@ -217,12 +200,34 @@ const fetchTechnologies = useCallback(async (userEmail?: string) => {
   };
 
   const deleteTechnology = async (techId: string) => {
-    await deleteDoc(doc(db, "technologies", techId));
+    const techRef = doc(db, "technologies", techId);
+    
+    // Also delete subcollections (creators and their videos)
+    const creatorsSnapshot = await getDocs(collection(techRef, "creators"));
+    const batch = writeBatch(db);
+    creatorsSnapshot.forEach(async (creatorDoc) => {
+        const videosSnapshot = await getDocs(collection(creatorDoc.ref, "videos"));
+        videosSnapshot.forEach(videoDoc => {
+            batch.delete(videoDoc.ref);
+        });
+        batch.delete(creatorDoc.ref);
+    });
+    batch.delete(techRef);
+
+    await batch.commit();
     await fetchTechnologies(user?.email);
   };
 
   const deleteCreator = async (techId: string, creatorId: string) => {
-    await deleteDoc(doc(db, `technologies/${techId}/creators`, creatorId));
+    const creatorRef = doc(db, `technologies/${techId}/creators`, creatorId);
+    const videosSnapshot = await getDocs(collection(creatorRef, "videos"));
+    const batch = writeBatch(db);
+    videosSnapshot.forEach(videoDoc => {
+        batch.delete(videoDoc.ref);
+    });
+    batch.delete(creatorRef);
+
+    await batch.commit();
     await fetchTechnologies(user?.email);
   };
 
@@ -242,7 +247,6 @@ const fetchTechnologies = useCallback(async (userEmail?: string) => {
         isAdmin, 
         technologies,
         allVideosForUser, 
-        login, 
         logout, 
         updateVideoStatus,
         addTechnology,

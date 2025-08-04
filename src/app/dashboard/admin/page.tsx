@@ -20,8 +20,6 @@ export default function AdminPage() {
   const { toast } = useToast();
 
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
-  const [videosForCreator, setVideosForCreator] = React.useState<Video[]>([]);
-  const [selectedTechForCreator, setSelectedTechForCreator] = React.useState<string>('');
   
   // Add state
   const [newTechName, setNewTechName] = React.useState('');
@@ -440,5 +438,7 @@ export default function AdminPage() {
     </>
   );
 }
+
+    
 
     

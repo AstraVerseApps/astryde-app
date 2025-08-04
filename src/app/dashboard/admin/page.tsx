@@ -27,11 +27,9 @@ export default function AdminPage() {
   const [newTechName, setNewTechName] = React.useState('');
   const [newTechDesc, setNewTechDesc] = React.useState('');
   const [newCreatorName, setNewCreatorName] = React.useState('');
-  const [newCreatorAvatar, setNewCreatorAvatar] = React.useState('');
   const [selectedTechForNewCreator, setSelectedTechForNewCreator] = React.useState('');
   const [newVideoTitle, setNewVideoTitle] = React.useState('');
   const [newVideoDuration, setNewVideoDuration] = React.useState('');
-  const [newVideoThumbnail, setNewVideoThumbnail] = React.useState('');
   const [newVideoUrl, setNewVideoUrl] = React.useState('');
   const [selectedTechForNewVideo, setSelectedTechForNewVideo] = React.useState('');
   const [selectedCreatorForNewVideo, setSelectedCreatorForNewVideo] = React.useState('');
@@ -68,10 +66,9 @@ export default function AdminPage() {
 
   const handleAddCreator = async () => {
     if (selectedTechForNewCreator && newCreatorName) {
-      await addCreator(selectedTechForNewCreator, { name: newCreatorName, avatar: newCreatorAvatar || 'https://placehold.co/100x100' });
+      await addCreator(selectedTechForNewCreator, { name: newCreatorName, avatar: 'https://placehold.co/100x100' });
       toast({ title: 'Success', description: 'Creator added successfully.' });
       setNewCreatorName('');
-      setNewCreatorAvatar('');
       setSelectedTechForNewCreator('');
       router.refresh();
     } else {
@@ -88,13 +85,12 @@ export default function AdminPage() {
       await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
         title: newVideoTitle,
         duration: newVideoDuration,
-        thumbnail: newVideoThumbnail || 'https://placehold.co/1280x720',
+        thumbnail: 'https://placehold.co/1280x720',
         url: newVideoUrl
       });
       toast({ title: 'Success', description: 'Video added successfully.' });
       setNewVideoTitle('');
       setNewVideoDuration('');
-      setNewVideoThumbnail('');
       setNewVideoUrl('');
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
@@ -241,10 +237,6 @@ export default function AdminPage() {
                             <Label htmlFor="creator-name">Creator Name</Label>
                             <Input id="creator-name" placeholder="e.g. Dr. Nova" value={newCreatorName} onChange={e => setNewCreatorName(e.target.value)} />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="creator-avatar">Avatar URL</Label>
-                            <Input id="creator-avatar" placeholder="https://placehold.co/100x100" value={newCreatorAvatar} onChange={e => setNewCreatorAvatar(e.target.value)} />
-                        </div>
                     </CardContent>
                     <div className="p-6 pt-0">
                         <Button className="w-full" onClick={handleAddCreator}>
@@ -295,10 +287,6 @@ export default function AdminPage() {
                         <div className="space-y-2">
                             <Label htmlFor="video-duration">Duration</Label>
                             <Input id="video-duration" placeholder="e.g. 42:10" value={newVideoDuration} onChange={e => setNewVideoDuration(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="video-thumbnail">Thumbnail URL</Label>
-                            <Input id="video-thumbnail" placeholder="https://placehold.co/1280x720" value={newVideoThumbnail} onChange={e => setNewVideoThumbnail(e.target.value)}/>
                         </div>
                          <div className="space-y-2">
                             <Label htmlFor="video-url">YouTube Video URL</Label>

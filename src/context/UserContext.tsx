@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, Unsubscribe, DocumentData } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
@@ -47,72 +47,77 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
   
   useEffect(() => {
+    setLoading(true);
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      if (!currentUser) {
+      
+      if (currentUser) {
+        // User-specific data listeners
+        const statusesCollectionRef = collection(db, `users/${currentUser.uid}/videoStatuses`);
+        const unsubscribeUserStatuses = onSnapshot(statusesCollectionRef, (snapshot) => {
+          const statuses: Record<string, Video['status']> = {};
+          snapshot.forEach(doc => {
+            statuses[doc.id] = doc.data().status;
+          });
+          setUserStatuses(statuses);
+        });
+
+        // Global content listeners
+        const technologiesCollectionRef = collection(db, 'technologies');
+        const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
+            const techPromises = techSnapshot.docs.map((techDoc) => {
+                return new Promise<Technology>((resolve) => {
+                    const techData = techDoc.data();
+                    const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
+
+                    onSnapshot(creatorsCollectionRef, (creatorsSnapshot) => {
+                        const creatorPromises = creatorsSnapshot.docs.map((creatorDoc) => {
+                            return new Promise<Creator>((resolveCreator) => {
+                                const creatorData = creatorDoc.data();
+                                const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+                                
+                                onSnapshot(videosCollectionRef, (videosSnapshot) => {
+                                    const videos = videosSnapshot.docs.map(videoDoc => ({
+                                        id: videoDoc.id,
+                                        ...videoDoc.data(),
+                                    })) as Video[];
+                                    resolveCreator({ id: creatorDoc.id, ...creatorData, videos } as Creator);
+                                });
+                            });
+                        });
+                        
+                        Promise.all(creatorPromises).then(creators => {
+                            resolve({ id: techDoc.id, ...techData, creators } as Technology);
+                        });
+                    });
+                });
+            });
+
+            Promise.all(techPromises).then(newTechnologies => {
+              setTechnologies(prev => {
+                const techMap = new Map(prev.map(t => [t.id, t]));
+                newTechnologies.forEach(t => techMap.set(t.id, t));
+                const allTechIds = new Set(newTechnologies.map(t => t.id));
+                const filtered = Array.from(techMap.values()).filter(t => allTechIds.has(t.id));
+                return filtered;
+              });
+              setLoading(false);
+            });
+        });
+
+        return () => {
+          unsubscribeUserStatuses();
+          unsubscribeTechnologies();
+        };
+      } else {
         setTechnologies([]);
         setUserStatuses({});
         setLoading(false);
       }
     });
+
     return () => unsubscribeAuth();
-  }, []);
-  
-  useEffect(() => {
-    if (user) {
-      const statusesCollectionRef = collection(db, `users/${user.uid}/videoStatuses`);
-      const unsubscribeUserStatuses = onSnapshot(statusesCollectionRef, (snapshot) => {
-        const statuses: Record<string, Video['status']> = {};
-        snapshot.forEach(doc => {
-          statuses[doc.id] = doc.data().status;
-        });
-        setUserStatuses(statuses);
-      }, (error) => {
-        console.error("Error fetching user statuses:", error);
-      });
-      return () => unsubscribeUserStatuses();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    setLoading(true);
-    const technologiesCollectionRef = collection(db, 'technologies');
-
-    const unsubscribe = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
-      const techPromises = techSnapshot.docs.map(async (techDoc) => {
-        const techData = techDoc.data();
-        const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
-        const creatorsSnapshot = await getDocs(creatorsCollectionRef);
-
-        const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
-          const creatorData = creatorDoc.data();
-          const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-          const videosSnapshot = await getDocs(videosCollectionRef);
-          const videos = videosSnapshot.docs.map(videoDoc => ({
-            id: videoDoc.id,
-            ...videoDoc.data(),
-          })) as Video[];
-          return { id: creatorDoc.id, ...creatorData, videos } as Creator;
-        });
-        
-        const creators = await Promise.all(creatorPromises);
-        return { id: techDoc.id, ...techData, creators } as Technology;
-      });
-
-      Promise.all(techPromises).then(newTechnologies => {
-        setTechnologies(newTechnologies);
-        setLoading(false);
-      }).catch(error => {
-        console.error("Error processing technologies:", error);
-        setLoading(false);
-      });
-    }, (error) => {
-      console.error("Error fetching technologies:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
   }, []);
 
 

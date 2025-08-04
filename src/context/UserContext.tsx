@@ -38,36 +38,34 @@ const processTechnologies = (technologies: Technology[], userStatuses: Record<st
 
 const seedDatabase = async () => {
     try {
-        const technologiesSnapshot = await getDocs(collection(db, 'technologies'));
-        if (technologiesSnapshot.empty) {
-            console.log('Database is empty, seeding...');
-            const batch = writeBatch(db);
+        console.log('Seeding database...');
+        const batch = writeBatch(db);
 
-            initialTechnologies.forEach(tech => {
-                const techDocRef = doc(db, 'technologies', tech.id);
-                // Exclude icon component, only store iconName
-                const { creators, icon, ...techData } = tech;
-                const iconName = (icon as any).displayName || 'BrainCircuit';
-                batch.set(techDocRef, { ...techData, iconName });
+        initialTechnologies.forEach(tech => {
+            const techDocRef = doc(db, 'technologies', tech.id);
+            // Exclude icon component, only store iconName
+            const { creators, icon, ...techData } = tech;
+            const iconName = (icon as any).displayName || 'BrainCircuit';
+            batch.set(techDocRef, { ...techData, iconName });
 
-                tech.creators.forEach(creator => {
-                    const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
-                    const { videos, ...creatorData } = creator;
-                    batch.set(creatorDocRef, creatorData);
+            tech.creators.forEach(creator => {
+                const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
+                const { videos, ...creatorData } = creator;
+                batch.set(creatorDocRef, creatorData);
 
-                    creator.videos.forEach(video => {
-                        const videoDocRef = doc(db, `technologies/${tech.id}/creators/${creator.id}/videos`, video.id);
-                        const { status, ...videoData } = video;
-                        batch.set(videoDocRef, { ...videoData, status: 'Not Started'});
-                    });
+                creator.videos.forEach(video => {
+                    const videoDocRef = doc(db, `technologies/${tech.id}/creators/${creator.id}/videos`, video.id);
+                    const { status, ...videoData } = video;
+                    batch.set(videoDocRef, { ...videoData, status: 'Not Started'});
                 });
             });
+        });
 
-            await batch.commit();
-            console.log('Database seeded successfully.');
-        } else {
-            console.log('Database already contains data, skipping seed.');
-        }
+        await batch.commit();
+        console.log('Database seeded successfully.');
+        // Set a flag in localStorage to prevent re-seeding
+        localStorage.setItem('db_seeded', 'true');
+
     } catch (error) {
         console.error("Error seeding database:", error);
     }
@@ -99,22 +97,31 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const checkAndSeedDatabase = async () => {
-        const technologiesSnapshot = await getDocs(collection(db, 'technologies'));
-        if (technologiesSnapshot.empty) {
-            await seedDatabase();
+        const hasSeeded = localStorage.getItem('db_seeded');
+        if (!hasSeeded) {
+            const technologiesSnapshot = await getDocs(collection(db, 'technologies'));
+            if (technologiesSnapshot.empty) {
+                await seedDatabase();
+            } else {
+                // If the database is not empty but the flag isn't set, set it.
+                // This covers cases where data exists from a previous session
+                // before this logic was implemented.
+                localStorage.setItem('db_seeded', 'true');
+            }
         }
     };
     checkAndSeedDatabase();
   }, []);
 
   useEffect(() => {
+    setLoading(true);
     let unsubscribeFirestore: () => void = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
         
-        unsubscribeFirestore();
+        unsubscribeFirestore(); // Unsubscribe from previous listener if it exists
 
         unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
             const techs: Technology[] = [];
@@ -144,6 +151,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             }
             
             setTechnologies(processTechnologies(techs, userStatuses));
+            setLoading(false);
+        }, (error) => {
+            console.error("Firestore snapshot error:", error);
             setLoading(false);
         });
     });

@@ -22,8 +22,8 @@ const getIconComponent = (iconName?: string) => {
     return iconMap[iconName];
 };
 
-const processTechnologies = (docs: any[], userStatuses: Record<string, Video['status']> = {}): Technology[] => {
-    return docs.map(tech => ({
+const processTechnologies = (technologies: Technology[], userStatuses: Record<string, Video['status']> = {}): Technology[] => {
+    return technologies.map(tech => ({
       ...tech,
       icon: getIconComponent(tech.iconName),
       creators: tech.creators.map((creator: Creator) => ({
@@ -95,60 +95,67 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
-  const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
+    let rawTechnologies: Technology[] = [];
+    let userStatuses: Record<string, Video['status']> = {};
+
     const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-      if (snapshot.empty) {
-        await seedDatabase();
-      } else {
+        if (snapshot.empty) {
+            await seedDatabase();
+            // The snapshot listener will be re-triggered after seeding
+            return;
+        }
+
         const techs: Technology[] = [];
         for (const techDoc of snapshot.docs) {
-          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'>;
-          const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-          const creators: Creator[] = [];
+            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
+            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+            const creators: Creator[] = [];
 
-          for (const creatorDoc of creatorsSnapshot.docs) {
-            const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-            const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-            const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-              id: videoDoc.id,
-              ...(videoDoc.data() as Omit<Video, 'id'>)
-            }));
-            creators.push({ id: creatorDoc.id, ...creatorData, videos });
-          }
-          techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName });
+            for (const creatorDoc of creatorsSnapshot.docs) {
+                const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                    id: videoDoc.id,
+                    ...(videoDoc.data() as Omit<Video, 'id'>)
+                }));
+                creators.push({ id: creatorDoc.id, ...creatorData, videos });
+            }
+            techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
         }
-        setRawTechnologies(techs);
-      }
-    });
-    
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      
-      if (currentUser) {
-        // User is signed in, load their progress
-        const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
-        const userStatuses: Record<string, Video['status']> = {};
-        statusesSnapshot.forEach(doc => {
-            userStatuses[doc.id] = doc.data().status;
-        });
+        rawTechnologies = techs;
+        // Process technologies with the current user statuses
         setTechnologies(processTechnologies(rawTechnologies, userStatuses));
-      } else {
-        // User is signed out, use default statuses
-        setTechnologies(processTechnologies(rawTechnologies));
-      }
-      setLoading(false);
+        setLoading(false); // Set loading to false after initial data load
+    });
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+        setUser(currentUser);
+        setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+
+        if (currentUser) {
+            const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
+            const statuses: Record<string, Video['status']> = {};
+            statusesSnapshot.forEach(doc => {
+                statuses[doc.id] = doc.data().status;
+            });
+            userStatuses = statuses;
+        } else {
+            userStatuses = {};
+        }
+        // Reprocess technologies with new user statuses
+        setTechnologies(processTechnologies(rawTechnologies, userStatuses));
+        setLoading(false); // Also set loading to false on auth state change
     });
 
     return () => {
-      unsubscribeAuth();
-      unsubscribeFirestore();
+        unsubscribeAuth();
+        unsubscribeFirestore();
     };
-  }, [rawTechnologies]);
+}, []);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -157,6 +164,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
+      setLoading(false);
     }
   };
 
@@ -170,18 +178,25 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const updateVideoStatus = async (videoId: string, status: Video['status']) => {
     if (!user) return;
+    const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
-        await runTransaction(db, async (transaction) => {
-            const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
-            transaction.set(userStatusesRef, { status });
-        });
+        await setDoc(userStatusesRef, { status });
         // Optimistically update local state
-        setTechnologies(prevTechs => processTechnologies(prevTechs, {[videoId]: status}));
+        setTechnologies(prevTechs => {
+            const newTechs = prevTechs.map(t => ({
+                ...t,
+                creators: t.creators.map(c => ({
+                    ...c,
+                    videos: c.videos.map(v => v.id === videoId ? { ...v, status } : v)
+                }))
+            }));
+            return processTechnologies(newTechs, { [videoId]: status });
+        });
     } catch (e) {
-        console.error("Transaction failed: ", e);
+        console.error("Failed to update status: ", e);
     }
   };
-  
+
   const addTechnology = async (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => {
     const { name, description, iconName } = tech;
     await addDoc(collection(db, 'technologies'), { name, description, iconName });
@@ -190,7 +205,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const addCreator = async (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => {
     await addDoc(collection(db, `technologies/${techId}/creators`), creator);
   };
-  
+
   const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), { ...video, status: 'Not Started' });
   };
@@ -202,7 +217,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         batch.delete(doc.ref);
     });
   };
-  
+
   const deleteTechnology = async (techId: string) => {
     const batch = writeBatch(db);
     const techDocRef = doc(db, 'technologies', techId);
@@ -212,17 +227,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
       batch.delete(creatorDoc.ref);
     }
-    
+
     batch.delete(techDocRef);
     await batch.commit();
   };
-  
+
   const deleteCreator = async (techId: string, creatorId: string) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
-    
+
     await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
-    
+
     batch.delete(creatorDocRef);
     await batch.commit();
   };
@@ -232,13 +247,13 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <UserContext.Provider value={{ 
-        user, 
-        isAdmin, 
+    <UserContext.Provider value={{
+        user,
+        isAdmin,
         technologies,
         loading,
-        signInWithGoogle, 
-        logout, 
+        signInWithGoogle,
+        logout,
         updateVideoStatus,
         addTechnology,
         addCreator,

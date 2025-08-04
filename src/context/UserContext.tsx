@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged, signInWithRedirect, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithRedirect, GoogleAuthProvider, signOut, getRedirectResult } from 'firebase/auth';
 import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
@@ -90,43 +90,61 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setLoading(true);
-      setUser(currentUser);
-      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-    });
-
-    const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-        setLoading(true);
-        if (snapshot.empty) {
-          await seedDatabase();
-        } else {
-            const techs: Technology[] = [];
-            for (const techDoc of snapshot.docs) {
-                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-                const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-                const creators: Creator[] = [];
-
-                for (const creatorDoc of creatorsSnapshot.docs) {
-                    const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                    const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                    const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                        id: videoDoc.id,
-                        ...(videoDoc.data() as Omit<Video, 'id'>)
-                    }));
-                    creators.push({ id: creatorDoc.id, ...creatorData, videos });
-                }
-                techs.push({ id: techDoc.id, ...techData, creators });
-            }
-            setTechnologies(processTechnologies(techs));
+    // This effect handles the redirect result from Google Sign-In.
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          // User is signed in.
+          // The onAuthStateChanged observer will handle the user state update.
+          console.log('Redirect result processed.');
         }
-        setLoading(false);
-    });
+      })
+      .catch((error) => {
+        console.error('Error processing redirect result:', error);
+      })
+      .finally(() => {
+        // Continue with the rest of the initialization.
+        const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+          setLoading(true);
+          setUser(currentUser);
+          setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+          // Firestore subscription should only run after auth state is determined.
+          setupFirestore();
+        });
 
-    return () => {
-      unsubscribeAuth();
-      unsubscribeFirestore();
-    };
+        // Detach the listener when the component unmounts
+        return () => unsubscribeAuth();
+      });
+
+    const setupFirestore = () => {
+      const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
+          setLoading(true);
+          if (snapshot.empty) {
+            await seedDatabase();
+          } else {
+              const techs: Technology[] = [];
+              for (const techDoc of snapshot.docs) {
+                  const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
+                  const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+                  const creators: Creator[] = [];
+
+                  for (const creatorDoc of creatorsSnapshot.docs) {
+                      const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                      const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                      const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                          id: videoDoc.id,
+                          ...(videoDoc.data() as Omit<Video, 'id'>)
+                      }));
+                      creators.push({ id: creatorDoc.id, ...creatorData, videos });
+                  }
+                  techs.push({ id: techDoc.id, ...techData, creators });
+              }
+              setTechnologies(processTechnologies(techs));
+          }
+          setLoading(false);
+      });
+      return () => unsubscribeFirestore();
+    }
   }, []);
 
   const signInWithGoogle = async () => {

@@ -44,7 +44,7 @@ interface UserContextType {
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => Promise<void>;
-  addCreator: (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => Promise<void>;
+  addCreator: (techId: string, creator: Omit<Creator, 'id'>) => Promise<void>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
@@ -60,59 +60,55 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-        setLoading(true);
-        setUser(currentUser);
-        setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setLoading(true);
+      setUser(currentUser);
+      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
 
-        const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (snapshot) => {
-            const techs: Technology[] = [];
-            for (const techDoc of snapshot.docs) {
-                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
-                
-                const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-                const creators: Creator[] = [];
+      const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (snapshot) => {
+          const techs: Technology[] = [];
+          for (const techDoc of snapshot.docs) {
+              const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
+              
+              const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+              const creators: Creator[] = [];
 
-                for (const creatorDoc of creatorsSnapshot.docs) {
-                    const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                    const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                    const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                        id: videoDoc.id,
-                        ...(videoDoc.data() as Omit<Video, 'id'>)
-                    }));
-                    creators.push({ id: creatorDoc.id, ...creatorData, videos });
-                }
-                techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
-            }
-            
-            let userStatuses: Record<string, Video['status']> = {};
-            if (currentUser) {
-                try {
-                    const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
-                    statusesSnapshot.forEach(doc => {
-                        userStatuses[doc.id] = doc.data().status;
-                    });
-                } catch (e) {
-                    console.error("Error fetching user statuses:", e);
-                }
-            }
-            
-            setTechnologies(processTechnologies(techs, userStatuses));
-            // Only set loading to false after all data is fetched and processed
-            setLoading(false); 
-        }, (error) => {
-            console.error("Firestore snapshot error:", error);
-            setLoading(false);
-        });
+              for (const creatorDoc of creatorsSnapshot.docs) {
+                  const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                  const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                  const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                      id: videoDoc.id,
+                      ...(videoDoc.data() as Omit<Video, 'id'>)
+                  }));
+                  creators.push({ id: creatorDoc.id, ...creatorData, videos });
+              }
+              techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
+          }
+          
+          let userStatuses: Record<string, Video['status']> = {};
+          if (currentUser) {
+              try {
+                  const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
+                  statusesSnapshot.forEach(doc => {
+                      userStatuses[doc.id] = doc.data().status;
+                  });
+              } catch (e) {
+                  console.error("Error fetching user statuses:", e);
+              }
+          }
+          
+          setTechnologies(processTechnologies(techs, userStatuses));
+          setLoading(false); 
+      }, (error) => {
+          console.error("Firestore snapshot error:", error);
+          setLoading(false);
+      });
 
-        // This function will be called when the auth state changes (e.g., logout)
-        // or when the component unmounts.
-        return () => {
-            unsubscribeFirestore();
-        };
+      return () => {
+          unsubscribeFirestore();
+      };
     });
 
-    // This is the cleanup function for the onAuthStateChanged listener itself.
     return () => {
       unsubscribeAuth();
     };
@@ -130,7 +126,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await signOut(auth);
-      setTechnologies([]); // Clear technologies on logout
+      // No need to clear technologies here, the onSnapshot will handle the state change
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -151,7 +147,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, 'technologies'), { name, description, iconName });
   };
 
-  const addCreator = async (techId: string, creator: Omit<Creator, 'id' | 'videos'>) => {
+  const addCreator = async (techId: string, creator: Omit<Creator, 'id'>) => {
     await addDoc(collection(db, `technologies/${techId}/creators`), creator);
   };
 

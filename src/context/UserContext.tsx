@@ -90,31 +90,19 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This effect handles the auth state change and Firestore data fetching.
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setLoading(true); // Start loading when auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, currentUser => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      
-      // If there's a user, set up the Firestore listener.
-      // Otherwise, we can assume no data needs to be fetched.
-      if (currentUser) {
-        // You might want to move Firestore setup here if it depends on the user.
-      }
-      setLoading(false); // Stop loading after user is set
+      setLoading(false);
+    });
+    
+    // Process the redirect result
+    getRedirectResult(auth).catch(error => {
+      // Handle errors here, such as user closing the popup.
+      console.error("Error processing redirect result:", error);
+      setLoading(false);
     });
 
-    // Handle the redirect result separately on initial load.
-    getRedirectResult(auth)
-      .catch((error) => {
-        console.error("Error processing redirect result:", error);
-      })
-      .finally(() => {
-        // The onAuthStateChanged listener will handle the user state update.
-        // We might need to adjust loading state here if needed, but onAuthStateChanged should cover it.
-      });
-
-    // Set up the Firestore listener regardless of auth state for public data
     const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
       if (snapshot.empty) {
         await seedDatabase();
@@ -149,13 +137,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    // Setting loading to true here can provide immediate UI feedback
     setLoading(true);
     try {
       await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
-      setLoading(false); // Reset loading state on error
+      setLoading(false);
     }
   };
 

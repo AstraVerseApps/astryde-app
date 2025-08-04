@@ -48,11 +48,19 @@ export default function AdminPage() {
 
   const handleAddTechnology = async () => {
     if (newTechName && newTechDesc) {
-      await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
-      toast({ title: 'Success', description: 'Technology added successfully.' });
-      setNewTechName('');
-      setNewTechDesc('');
-      router.refresh();
+      try {
+        await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
+        toast({ title: 'Success', description: 'Technology added successfully.' });
+        setNewTechName('');
+        setNewTechDesc('');
+        router.refresh();
+      } catch (error) {
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not add technology. Please try again.',
+        });
+      }
     } else {
         toast({
             variant: 'destructive',
@@ -93,20 +101,28 @@ export default function AdminPage() {
 
   const handleAddVideo = async () => {
     if (selectedTechForNewVideo && selectedCreatorForNewVideo && newVideoTitle && newVideoUrl && newVideoDuration) {
-      await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
-        title: newVideoTitle,
-        duration: newVideoDuration,
-        thumbnail: 'https://placehold.co/1280x720',
-        url: newVideoUrl
-      });
-      toast({ title: 'Success', description: 'Video added successfully.' });
-      setNewVideoTitle('');
-      setNewVideoDuration('');
-      setNewVideoUrl('');
-      setSelectedTechForNewVideo('');
-      setSelectedCreatorForNewVideo('');
-      setCreatorsForTech([]);
-      router.refresh();
+      try {
+        await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
+          title: newVideoTitle,
+          duration: newVideoDuration,
+          thumbnail: 'https://placehold.co/1280x720',
+          url: newVideoUrl
+        });
+        toast({ title: 'Success', description: 'Video added successfully.' });
+        setNewVideoTitle('');
+        setNewVideoDuration('');
+        setNewVideoUrl('');
+        setSelectedTechForNewVideo('');
+        setSelectedCreatorForNewVideo('');
+        setCreatorsForTech([]);
+        router.refresh();
+      } catch (error) {
+         toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not add video. Please try again.',
+        });
+      }
     } else {
         toast({
             variant: 'destructive',
@@ -441,3 +457,5 @@ export default function AdminPage() {
     </>
   );
 }
+
+    

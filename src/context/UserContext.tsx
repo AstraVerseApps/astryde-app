@@ -65,12 +65,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       
-      if (!currentUser) {
-        setTechnologies([]);
-        setLoading(false);
-        return;
-      }
-
       const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (techSnapshot) => {
         const techsPromises = techSnapshot.docs.map(async (techDoc) => {
           const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
@@ -111,7 +105,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
       });
 
-      return () => unsubscribeFirestore();
+      return () => {
+        unsubscribeFirestore();
+      };
     });
 
     return () => unsubscribeAuth();
@@ -221,3 +217,5 @@ export const useUser = () => {
   }
   return context;
 };
+
+    

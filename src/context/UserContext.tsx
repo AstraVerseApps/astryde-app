@@ -117,7 +117,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
-      // We don't set loading to false here because onAuthStateChanged will handle it
+      setLoading(false);
     }
   };
 

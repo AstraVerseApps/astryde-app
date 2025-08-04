@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, DocumentData } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
@@ -50,8 +50,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      
-      const unsubscribes: Unsubscribe[] = [];
+
+      let allUnsubscribes: Unsubscribe[] = [];
 
       if (currentUser) {
         setLoading(true);
@@ -64,50 +64,103 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           });
           setUserStatuses(newStatuses);
         });
-        unsubscribes.push(unsubscribeUserStatuses);
-        
+        allUnsubscribes.push(unsubscribeUserStatuses);
+
         const technologiesCollectionRef = collection(db, 'technologies');
         const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
-            const techPromises = techSnapshot.docs.map(async (techDoc) => {
-                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string };
-                
-                const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
-                const creatorsSnapshot = await getDocs(creatorsCollectionRef);
+          // Clean up old creator/video listeners before processing new tech list
+          allUnsubscribes.filter(unsub => unsub !== unsubscribeTechnologies && unsub !== unsubscribeUserStatuses).forEach(unsub => unsub());
+          allUnsubscribes = [unsubscribeTechnologies, unsubscribeUserStatuses];
+          
+          let techData: Technology[] = [];
+          if(techSnapshot.empty) {
+            setTechnologies([]);
+            setLoading(false);
+            return;
+          }
 
-                const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
-                    const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                    const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-                    const videosSnapshot = await getDocs(videosCollectionRef);
-                    const videos = videosSnapshot.docs.map(videoDoc => ({
-                        id: videoDoc.id,
-                        ...videoDoc.data()
-                    } as Video));
-                    return { id: creatorDoc.id, ...creatorData, videos };
+          techSnapshot.forEach((techDoc) => {
+            const tech: Technology = {
+                id: techDoc.id,
+                ...techDoc.data(),
+                creators: [],
+            } as Technology;
+            techData.push(tech);
+
+            // Nested listener for creators
+            const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
+            const unsubscribeCreators = onSnapshot(creatorsRef, (creatorsSnapshot) => {
+                let creatorsData: Creator[] = [];
+
+                if(creatorsSnapshot.empty) {
+                    setTechnologies(currentTechs => currentTechs.map(t => t.id === techDoc.id ? { ...t, creators: [] } : t));
+                    return;
+                }
+
+                creatorsSnapshot.forEach((creatorDoc) => {
+                    const creator: Creator = {
+                        id: creatorDoc.id,
+                        ...creatorDoc.data(),
+                        videos: [],
+                    } as Creator;
+                    creatorsData.push(creator);
+
+                    // Nested listener for videos
+                    const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+                    const unsubscribeVideos = onSnapshot(videosRef, (videosSnapshot) => {
+                        const videosData = videosSnapshot.docs.map(videoDoc => ({
+                            id: videoDoc.id,
+                            ...videoDoc.data()
+                        } as Video));
+
+                        setTechnologies(currentTechs => {
+                            return currentTechs.map(t => {
+                                if (t.id === techDoc.id) {
+                                    return {
+                                        ...t,
+                                        creators: t.creators.map(c => {
+                                            if (c.id === creatorDoc.id) {
+                                                return { ...c, videos: videosData };
+                                            }
+                                            return c;
+                                        })
+                                    };
+                                }
+                                return t;
+                            });
+                        });
+                    });
+                    allUnsubscribes.push(unsubscribeVideos);
                 });
 
-                const creators = await Promise.all(creatorPromises);
-                return { id: techDoc.id, ...techData, creators };
+                setTechnologies(currentTechs => {
+                   return currentTechs.map(t => {
+                        if (t.id === techDoc.id) {
+                            return { ...t, creators: creatorsData };
+                        }
+                        return t;
+                   });
+                });
             });
-
-            Promise.all(techPromises).then(newTechnologies => {
-                setTechnologies(newTechnologies as Technology[]);
-                setLoading(false);
-            });
+            allUnsubscribes.push(unsubscribeCreators);
+          });
+          
+          setTechnologies(techData);
+          setLoading(false);
         });
-        unsubscribes.push(unsubscribeTechnologies);
 
-
+        allUnsubscribes.push(unsubscribeTechnologies);
       } else {
         setLoading(false);
         setUser(null);
         setIsAdmin(false);
         setTechnologies([]);
         setUserStatuses({});
-        unsubscribes.forEach(unsub => unsub());
+        allUnsubscribes.forEach(unsub => unsub());
       }
 
       return () => {
-        unsubscribes.forEach(unsub => unsub());
+        allUnsubscribes.forEach(unsub => unsub());
       };
     });
 

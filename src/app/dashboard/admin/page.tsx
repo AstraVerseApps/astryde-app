@@ -60,7 +60,6 @@ export default function AdminPage() {
       toast({ title: 'Technology Created', description: 'The new technology has been added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
-      router.refresh();
     } catch (error) {
       console.error('Failed to add technology:', error);
       toast({
@@ -88,7 +87,6 @@ export default function AdminPage() {
       toast({ title: 'Creator Created', description: 'The new creator has been added successfully.' });
       setNewCreatorName('');
       setSelectedTechForNewCreator('');
-      router.refresh();
     } catch (error) {
       console.error('Failed to add creator:', error);
       toast({
@@ -123,7 +121,6 @@ export default function AdminPage() {
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
-      router.refresh();
     } catch (error) {
        console.error('Failed to add video:', error);
        toast({
@@ -457,5 +454,3 @@ export default function AdminPage() {
       </div>
     </>
   );
-
-    

@@ -12,10 +12,12 @@ import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useUser } from '@/context/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 export default function AdminPage() {
   const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo } = useUser();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
   
@@ -58,6 +60,7 @@ export default function AdminPage() {
       toast({ title: 'Technology Created', description: 'The new technology has been added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
+      router.refresh();
     } catch (error) {
       console.error('Failed to add technology:', error);
       toast({
@@ -85,6 +88,7 @@ export default function AdminPage() {
       toast({ title: 'Creator Created', description: 'The new creator has been added successfully.' });
       setNewCreatorName('');
       setSelectedTechForNewCreator('');
+      router.refresh();
     } catch (error) {
       console.error('Failed to add creator:', error);
       toast({
@@ -119,6 +123,7 @@ export default function AdminPage() {
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
+      router.refresh();
     } catch (error) {
        console.error('Failed to add video:', error);
        toast({
@@ -151,6 +156,7 @@ export default function AdminPage() {
         setSelectedTechForDelete('');
         setSelectedCreatorForDelete('');
         setSelectedVideoForDelete('');
+        router.refresh();
     } catch (error) {
         toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
         console.error("Deletion failed:", error);

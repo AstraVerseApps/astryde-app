@@ -4,10 +4,9 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
-import { technologies as initialTechnologies } from '@/lib/data';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -36,41 +35,6 @@ const processTechnologies = (technologies: Technology[], userStatuses: Record<st
     }));
 };
 
-const seedDatabase = async () => {
-    try {
-        console.log('Seeding database...');
-        const batch = writeBatch(db);
-
-        initialTechnologies.forEach(tech => {
-            const techDocRef = doc(db, 'technologies', tech.id);
-            // Exclude icon component, only store iconName
-            const { creators, icon, ...techData } = tech;
-            const iconName = tech.iconName || (typeof tech.icon !== 'string' ? (tech.icon as any).displayName : 'BrainCircuit') || 'BrainCircuit';
-            batch.set(techDocRef, { ...techData, iconName });
-
-            tech.creators.forEach(creator => {
-                const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
-                const { videos, ...creatorData } = creator;
-                batch.set(creatorDocRef, creatorData);
-
-                creator.videos.forEach(video => {
-                    const videoDocRef = doc(db, `technologies/${tech.id}/creators/${creator.id}/videos`, video.id);
-                    const { status, ...videoData } = video;
-                    batch.set(videoDocRef, { ...videoData, status: 'Not Started'});
-                });
-            });
-        });
-
-        await batch.commit();
-        console.log('Database seeded successfully.');
-        // Set a flag in localStorage to prevent re-seeding
-        localStorage.setItem('db_seeded', 'true');
-
-    } catch (error) {
-        console.error("Error seeding database:", error);
-    }
-};
-
 interface UserContextType {
   user: User | null;
   isAdmin: boolean;
@@ -94,21 +58,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const checkAndSeedDatabase = async () => {
-        const hasSeeded = localStorage.getItem('db_seeded');
-        if (!hasSeeded) {
-            const technologiesSnapshot = await getDocs(collection(db, 'technologies'));
-            if (technologiesSnapshot.empty) {
-                await seedDatabase();
-            } else {
-                localStorage.setItem('db_seeded', 'true');
-            }
-        }
-    };
-    checkAndSeedDatabase();
-  }, []);
 
   useEffect(() => {
     setLoading(true);

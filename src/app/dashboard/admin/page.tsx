@@ -12,10 +12,12 @@ import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useUser } from '@/context/UserContext';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AdminPage() {
   const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo } = useUser();
   const router = useRouter();
+  const { toast } = useToast();
 
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
   const [videosForCreator, setVideosForCreator] = React.useState<Video[]>([]);
@@ -51,30 +53,45 @@ export default function AdminPage() {
   const handleAddTechnology = async () => {
     if (newTechName && newTechDesc) {
       await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
+      toast({ title: 'Success', description: 'Technology added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
       router.refresh();
+    } else {
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Please fill in all required fields for the new technology.',
+        });
     }
   };
 
   const handleAddCreator = async () => {
     if (selectedTechForNewCreator && newCreatorName) {
       await addCreator(selectedTechForNewCreator, { name: newCreatorName, avatar: newCreatorAvatar || 'https://placehold.co/100x100' });
+      toast({ title: 'Success', description: 'Creator added successfully.' });
       setNewCreatorName('');
       setNewCreatorAvatar('');
       setSelectedTechForNewCreator('');
       router.refresh();
+    } else {
+         toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Please select a technology and provide a name for the creator.',
+        });
     }
   };
 
   const handleAddVideo = async () => {
-    if (selectedTechForNewVideo && selectedCreatorForNewVideo && newVideoTitle) {
+    if (selectedTechForNewVideo && selectedCreatorForNewVideo && newVideoTitle && newVideoUrl && newVideoDuration) {
       await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
         title: newVideoTitle,
         duration: newVideoDuration,
         thumbnail: newVideoThumbnail || 'https://placehold.co/1280x720',
         url: newVideoUrl
       });
+      toast({ title: 'Success', description: 'Video added successfully.' });
       setNewVideoTitle('');
       setNewVideoDuration('');
       setNewVideoThumbnail('');
@@ -83,24 +100,36 @@ export default function AdminPage() {
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
       router.refresh();
+    } else {
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Please fill in all required fields for the new video.',
+        });
     }
   };
 
 
   const handleDelete = async () => {
-    if (deleteType === 'technology' && selectedTechForDelete) {
-        await deleteTechnology(selectedTechForDelete);
-    } else if (deleteType === 'creator' && selectedCreatorForDelete) {
-        const techIdForCreator = technologies.find(t => t.creators.some(c => c.id === selectedCreatorForDelete))?.id;
-        if(techIdForCreator) {
-          await deleteCreator(techIdForCreator, selectedCreatorForDelete);
+    try {
+        if (deleteType === 'technology' && selectedTechForDelete) {
+            await deleteTechnology(selectedTechForDelete);
+        } else if (deleteType === 'creator' && selectedCreatorForDelete) {
+            const techIdForCreator = technologies.find(t => t.creators.some(c => c.id === selectedCreatorForDelete))?.id;
+            if(techIdForCreator) {
+              await deleteCreator(techIdForCreator, selectedCreatorForDelete);
+            }
+        } else if (deleteType === 'video' && selectedVideoForDelete) {
+            const techIdForVideo = technologies.find(t => t.creators.some(c => c.videos.some(v => v.id === selectedVideoForDelete)))?.id;
+            const creatorIdForVideo = technologies.flatMap(t => t.creators).find(c => c.videos.some(v => v.id === selectedVideoForDelete))?.id;
+            if (techIdForVideo && creatorIdForVideo) {
+              await deleteVideo(techIdForVideo, creatorIdForVideo, selectedVideoForDelete);
+            }
         }
-    } else if (deleteType === 'video' && selectedVideoForDelete) {
-        const techIdForVideo = technologies.find(t => t.creators.some(c => c.videos.some(v => v.id === selectedVideoForDelete)))?.id;
-        const creatorIdForVideo = technologies.flatMap(t => t.creators).find(c => c.videos.some(v => v.id === selectedVideoForDelete))?.id;
-        if (techIdForVideo && creatorIdForVideo) {
-          await deleteVideo(techIdForVideo, creatorIdForVideo, selectedVideoForDelete);
-        }
+        toast({ title: "Success", description: "Content deleted successfully." });
+    } catch (error) {
+        toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
+        console.error("Deletion failed:", error);
     }
     
     // Reset state and refresh the page to reflect changes
@@ -108,7 +137,8 @@ export default function AdminPage() {
     setSelectedTechForDelete('');
     setSelectedCreatorForDelete('');
     setSelectedVideoForDelete('');
-    window.location.reload();
+    // Use router.refresh() for a soft refresh instead of a full page reload
+    router.refresh();
   };
   
 

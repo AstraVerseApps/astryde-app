@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, WriteBatch, DocumentData } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
@@ -19,20 +19,6 @@ const iconMap: Record<string, React.ElementType> = {
 const getIconComponent = (iconName?: string) => {
     if (!iconName || !iconMap[iconName]) return BrainCircuit;
     return iconMap[iconName];
-};
-
-const processTechnologies = (technologies: Technology[], userStatuses: Record<string, Video['status']> = {}): Technology[] => {
-    return technologies.map(tech => ({
-      ...tech,
-      icon: getIconComponent(tech.iconName),
-      creators: tech.creators.map((creator: Creator) => ({
-          ...creator,
-          videos: creator.videos.map((video: Video) => ({
-              ...video,
-              status: userStatuses[video.id] || video.status || 'Not Started',
-          })),
-      })),
-    }));
 };
 
 interface UserContextType {
@@ -58,6 +44,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
+
+  const processTechnologies = useCallback((techs: any[], statuses: Record<string, Video['status']>): Technology[] => {
+      return techs.map(tech => ({
+        ...tech,
+        icon: getIconComponent(tech.iconName),
+        creators: tech.creators.map((creator: Creator) => ({
+            ...creator,
+            videos: creator.videos.map((video: Video) => ({
+                ...video,
+                status: statuses[video.id] || video.status || 'Not Started',
+            })),
+        })),
+      }));
+  }, []);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
@@ -65,53 +66,68 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       
-      const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (techSnapshot) => {
-        const techsPromises = techSnapshot.docs.map(async (techDoc) => {
-          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
+      let unsubscribeFirestore: Unsubscribe | undefined;
+      let unsubscribeUserStatuses: Unsubscribe | undefined;
 
-          const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-          const creatorsPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
-            const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-            const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-            const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-              id: videoDoc.id,
-              ...(videoDoc.data() as Omit<Video, 'id'>),
-            }));
-            return { id: creatorDoc.id, ...creatorData, videos };
+      if (currentUser) {
+          unsubscribeUserStatuses = onSnapshot(collection(db, `users/${currentUser.uid}/videoStatuses`), (snapshot) => {
+              const statuses: Record<string, Video['status']> = {};
+              snapshot.forEach(doc => {
+                  statuses[doc.id] = doc.data().status;
+              });
+              setUserStatuses(statuses);
+          }, (error) => {
+              console.error("Error fetching user statuses:", error);
+          });
+      } else {
+          setUserStatuses({});
+      }
+
+      unsubscribeFirestore = onSnapshot(collection(db, "technologies"), (techSnapshot) => {
+          const techsPromises = techSnapshot.docs.map(async (techDoc) => {
+              const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
+              
+              const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+              const creatorsPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+                  const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                  const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                  const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                      id: videoDoc.id,
+                      ...(videoDoc.data() as Omit<Video, 'id'>),
+                      status: 'Not Started'
+                  }));
+                  return { id: creatorDoc.id, ...creatorData, videos };
+              });
+              const creators = await Promise.all(creatorsPromises);
+              
+              return { 
+                  id: techDoc.id, 
+                  ...techData, 
+                  creators, 
+                  iconName: techData.iconName || 'BrainCircuit' 
+              };
           });
 
-          const creators = await Promise.all(creatorsPromises);
-          return { id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' };
-        });
-
-        const techs = await Promise.all(techsPromises);
-        
-        let userStatuses: Record<string, Video['status']> = {};
-        if (currentUser) {
-          try {
-            const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
-            statusesSnapshot.forEach(doc => {
-              userStatuses[doc.id] = doc.data().status;
-            });
-          } catch (e) {
-            console.error("Error fetching user statuses:", e);
-          }
-        }
-        
-        setTechnologies(processTechnologies(techs, userStatuses));
-        setLoading(false); 
+          Promise.all(techsPromises).then(techs => {
+              setTechnologies(processTechnologies(techs, userStatuses));
+              setLoading(false);
+          }).catch(error => {
+              console.error("Error processing technologies:", error);
+              setLoading(false);
+          });
       }, (error) => {
-        console.error("Firestore snapshot error:", error);
-        setLoading(false);
+          console.error("Firestore snapshot error:", error);
+          setLoading(false);
       });
 
       return () => {
-        unsubscribeFirestore();
+        if (unsubscribeFirestore) unsubscribeFirestore();
+        if (unsubscribeUserStatuses) unsubscribeUserStatuses();
       };
     });
 
     return () => unsubscribeAuth();
-  }, []);
+  }, [user, userStatuses, processTechnologies]);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -146,6 +162,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addCreator = async (techId: string, creator: { name: string; avatar: string; }) => {
+    if (!techId) throw new Error("Technology ID is required to add a creator.");
     await addDoc(collection(db, `technologies/${techId}/creators`), creator);
   };
 

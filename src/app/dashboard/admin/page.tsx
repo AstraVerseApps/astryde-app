@@ -60,8 +60,8 @@ export default function AdminPage() {
       toast({ title: 'Success', description: 'Technology added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
-      router.refresh();
     } catch (error) {
+      console.error('Failed to add technology:', error);
       toast({
           variant: 'destructive',
           title: 'Error',
@@ -82,12 +82,11 @@ export default function AdminPage() {
     try {
       await addCreator(selectedTechForNewCreator, {
         name: newCreatorName,
-        avatar: 'https://placehold.co/100x100',
+        avatar: 'https://placehold.co/100x100'
       });
       toast({ title: 'Success', description: 'Creator added successfully.' });
       setNewCreatorName('');
       setSelectedTechForNewCreator('');
-      router.refresh();
     } catch (error) {
       console.error('Failed to add creator:', error);
       toast({
@@ -122,8 +121,8 @@ export default function AdminPage() {
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
-      router.refresh();
     } catch (error) {
+       console.error('Failed to add video:', error);
        toast({
           variant: 'destructive',
           title: 'Error',
@@ -154,7 +153,6 @@ export default function AdminPage() {
         setSelectedTechForDelete('');
         setSelectedCreatorForDelete('');
         setSelectedVideoForDelete('');
-        router.refresh();
     } catch (error) {
         toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
         console.error("Deletion failed:", error);

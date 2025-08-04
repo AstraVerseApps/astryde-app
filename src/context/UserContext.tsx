@@ -51,104 +51,47 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       
-      let masterUnsubscribe: Unsubscribe | null = null;
+      let unsubscribe: Unsubscribe | null = null;
+      let unsubscribeUserStatuses: Unsubscribe | null = null;
 
       if (currentUser) {
         setLoading(true);
 
-        // Listener for user-specific video statuses
         const userStatusesRef = collection(db, `users/${currentUser.uid}/videoStatuses`);
-        const unsubscribeUserStatuses = onSnapshot(userStatusesRef, (snapshot) => {
+        unsubscribeUserStatuses = onSnapshot(userStatusesRef, (snapshot) => {
           const newStatuses: Record<string, Video['status']> = {};
           snapshot.forEach(doc => {
             newStatuses[doc.id] = doc.data().status;
           });
           setUserStatuses(newStatuses);
         });
-
-        // This is the master listener for the top-level 'technologies' collection.
+        
         const technologiesCollectionRef = collection(db, 'technologies');
-        const technologyListeners = new Map<string, Unsubscribe>();
-
-        masterUnsubscribe = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
-          const currentTechIds = new Set<string>();
-
+        unsubscribe = onSnapshot(technologiesCollectionRef, async (techSnapshot) => {
           const techPromises = techSnapshot.docs.map(async (techDoc) => {
-            currentTechIds.add(techDoc.id);
             const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string };
+            const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
+            const creatorsSnapshot = await getDocs(creatorsCollectionRef);
 
-            return new Promise<Technology>((resolve) => {
-              const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
-              
-              if (!technologyListeners.has(techDoc.id)) {
-                  const creatorListeners = new Map<string, Unsubscribe>();
-                  
-                  const unsubscribeCreators = onSnapshot(creatorsCollectionRef, (creatorSnapshot) => {
-                      const currentCreatorIds = new Set<string>();
-
-                      const creatorPromises = creatorSnapshot.docs.map(async (creatorDoc) => {
-                          currentCreatorIds.add(creatorDoc.id);
-                          const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-
-                          return new Promise<Creator>((resolveCreator) => {
-                              const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-
-                              if (!creatorListeners.has(creatorDoc.id)) {
-                                  const unsubscribeVideos = onSnapshot(videosCollectionRef, (videosSnapshot) => {
-                                      const videos = videosSnapshot.docs.map(videoDoc => ({
-                                          id: videoDoc.id,
-                                          ...videoDoc.data()
-                                      } as Video));
-                                      resolveCreator({ id: creatorDoc.id, ...creatorData, videos });
-                                  });
-                                  creatorListeners.set(creatorDoc.id, unsubscribeVideos);
-                              }
-                          });
-                      });
-
-                      // Unsubscribe from deleted creators
-                      creatorListeners.forEach((unsub, id) => {
-                          if (!currentCreatorIds.has(id)) {
-                              unsub();
-                              creatorListeners.delete(id);
-                          }
-                      });
-
-                      Promise.all(creatorPromises).then(creators => {
-                          resolve({ id: techDoc.id, ...techData, creators: creators.filter(Boolean) as Creator[] });
-                      });
-                  });
-                  technologyListeners.set(techDoc.id, unsubscribeCreators);
-              } else {
-                 // The listener already exists, we just need to resolve the tech data
-                 // for the state update. The existing listener will handle creator/video changes.
-                 const existingTech = technologies.find(t => t.id === techDoc.id);
-                 resolve({ id: techDoc.id, ...techData, creators: existingTech?.creators || [] });
-              }
+            const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+              const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+              const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+              const videosSnapshot = await getDocs(videosCollectionRef);
+              const videos = videosSnapshot.docs.map(videoDoc => ({
+                id: videoDoc.id,
+                ...videoDoc.data()
+              } as Video));
+              return { id: creatorDoc.id, ...creatorData, videos };
             });
-          });
-          
-          // Unsubscribe from deleted technologies
-          technologyListeners.forEach((unsub, id) => {
-            if (!currentTechIds.has(id)) {
-              unsub();
-              technologyListeners.delete(id);
-            }
+
+            const creators = await Promise.all(creatorPromises);
+            return { id: techDoc.id, ...techData, creators };
           });
 
-          Promise.all(techPromises).then((newTechnologies) => {
-            setTechnologies(newTechnologies.filter(Boolean) as Technology[]);
-            if(loading) setLoading(false);
-          });
+          const newTechnologies = await Promise.all(techPromises);
+          setTechnologies(newTechnologies as Technology[]);
+          setLoading(false);
         });
-
-        return () => {
-          unsubscribeUserStatuses();
-          if (masterUnsubscribe) {
-            masterUnsubscribe();
-          }
-          technologyListeners.forEach(unsub => unsub());
-        };
 
       } else {
         setUser(null);
@@ -156,14 +99,18 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setTechnologies([]);
         setUserStatuses({});
         setLoading(false);
-        if (masterUnsubscribe) {
-            masterUnsubscribe();
-        }
+        if (unsubscribe) unsubscribe();
+        if (unsubscribeUserStatuses) unsubscribeUserStatuses();
       }
+
+      return () => {
+        if (unsubscribe) unsubscribe();
+        if (unsubscribeUserStatuses) unsubscribeUserStatuses();
+      };
     });
 
     return () => unsubscribeAuth();
-  }, []); // Only runs on mount and when auth changes
+  }, []);
 
   const processedTechnologies = useMemo(() => {
     return technologies.map(tech => ({

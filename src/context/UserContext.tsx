@@ -126,7 +126,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await signOut(auth);
-      // No need to clear technologies here, the onSnapshot will handle the state change
     } catch (error) {
       console.error("Error signing out:", error);
     }

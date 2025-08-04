@@ -180,7 +180,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
 
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();
@@ -218,3 +218,5 @@ export const useUser = () => {
   }
   return context;
 };
+
+    

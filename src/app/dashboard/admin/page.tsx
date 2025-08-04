@@ -47,87 +47,88 @@ export default function AdminPage() {
   };
 
   const handleAddTechnology = async () => {
-    if (newTechName && newTechDesc) {
-      try {
-        await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
-        toast({ title: 'Success', description: 'Technology added successfully.' });
-        setNewTechName('');
-        setNewTechDesc('');
-        router.refresh();
-      } catch (error) {
-        toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Could not add technology. Please try again.',
-        });
-      }
-    } else {
-        toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Please fill in all required fields for the new technology.',
-        });
+    if (!newTechName || !newTechDesc) {
+      toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Please fill in all required fields for the new technology.',
+      });
+      return;
+    }
+    try {
+      await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
+      toast({ title: 'Success', description: 'Technology added successfully.' });
+      setNewTechName('');
+      setNewTechDesc('');
+      router.refresh();
+    } catch (error) {
+      toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Could not add technology. Please try again.',
+      });
     }
   };
 
   const handleAddCreator = async () => {
-    if (selectedTechForNewCreator && newCreatorName) {
-      try {
-        await addCreator(selectedTechForNewCreator, { 
-          name: newCreatorName, 
-          avatar: 'https://placehold.co/100x100',
-        });
-        toast({ title: 'Success', description: 'Creator added successfully.' });
-        setNewCreatorName('');
-        setSelectedTechForNewCreator('');
-        router.refresh();
-      } catch (error) {
-        console.error("Failed to add creator:", error);
-        toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Could not add creator. Please try again.',
-        });
-      }
-    } else {
-         toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Please select a technology and provide a name for the creator.',
-        });
+    if (!selectedTechForNewCreator || !newCreatorName) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Please select a technology and provide a name for the creator.',
+      });
+      return;
+    }
+    try {
+      await addCreator(selectedTechForNewCreator, {
+        name: newCreatorName,
+        avatar: 'https://placehold.co/100x100',
+      });
+      toast({ title: 'Success', description: 'Creator added successfully.' });
+      setNewCreatorName('');
+      setSelectedTechForNewCreator('');
+      router.refresh();
+    } catch (error) {
+      console.error('Failed to add creator:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not add creator. Please try again.',
+      });
     }
   };
 
+
   const handleAddVideo = async () => {
-    if (selectedTechForNewVideo && selectedCreatorForNewVideo && newVideoTitle && newVideoUrl && newVideoDuration) {
-      try {
-        await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
-          title: newVideoTitle,
-          duration: newVideoDuration,
-          thumbnail: 'https://placehold.co/1280x720',
-          url: newVideoUrl
-        });
-        toast({ title: 'Success', description: 'Video added successfully.' });
-        setNewVideoTitle('');
-        setNewVideoDuration('');
-        setNewVideoUrl('');
-        setSelectedTechForNewVideo('');
-        setSelectedCreatorForNewVideo('');
-        setCreatorsForTech([]);
-        router.refresh();
-      } catch (error) {
-         toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Could not add video. Please try again.',
-        });
-      }
-    } else {
-        toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Please fill in all required fields for the new video.',
-        });
+    if (!selectedTechForNewVideo || !selectedCreatorForNewVideo || !newVideoTitle || !newVideoUrl || !newVideoDuration) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Please fill in all required fields for the new video.',
+      });
+      return;
+    }
+    try {
+      await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
+        title: newVideoTitle,
+        duration: newVideoDuration,
+        thumbnail: 'https://placehold.co/1280x720',
+        url: newVideoUrl,
+      });
+      toast({ title: 'Success', description: 'Video added successfully.' });
+      setNewVideoTitle('');
+      setNewVideoDuration('');
+      setNewVideoUrl('');
+      setSelectedTechForNewVideo('');
+      setSelectedCreatorForNewVideo('');
+      setCreatorsForTech([]);
+      router.refresh();
+    } catch (error) {
+       toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Could not add video. Please try again.',
+      });
     }
   };
 

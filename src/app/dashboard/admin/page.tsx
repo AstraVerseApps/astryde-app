@@ -54,7 +54,6 @@ export default function AdminPage() {
       toast({ title: 'Success', description: 'Technology added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
-      router.refresh();
     } else {
         toast({
             variant: 'destructive',
@@ -66,11 +65,24 @@ export default function AdminPage() {
 
   const handleAddCreator = async () => {
     if (selectedTechForNewCreator && newCreatorName) {
-      await addCreator(selectedTechForNewCreator, { name: newCreatorName, avatar: 'https://placehold.co/100x100' });
-      toast({ title: 'Success', description: 'Creator added successfully.' });
-      setNewCreatorName('');
-      setSelectedTechForNewCreator('');
-      router.refresh();
+      try {
+        await addCreator(selectedTechForNewCreator, { 
+          name: newCreatorName, 
+          avatar: 'https://placehold.co/100x100',
+          videos: [] 
+        });
+        toast({ title: 'Success', description: 'Creator added successfully.' });
+        setNewCreatorName('');
+        setSelectedTechForNewCreator('');
+        router.refresh();
+      } catch (error) {
+        console.error("Failed to add creator:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not add creator. Please try again.',
+        });
+      }
     } else {
          toast({
             variant: 'destructive',
@@ -95,7 +107,6 @@ export default function AdminPage() {
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
-      router.refresh();
     } else {
         toast({
             variant: 'destructive',
@@ -132,7 +143,6 @@ export default function AdminPage() {
     setSelectedTechForDelete('');
     setSelectedCreatorForDelete('');
     setSelectedVideoForDelete('');
-    router.refresh();
   };
   
 

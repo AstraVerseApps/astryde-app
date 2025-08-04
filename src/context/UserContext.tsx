@@ -52,7 +52,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       
       if (currentUser) {
-        // All data loading is now contingent on the user
+        setLoading(true);
+        // Listener for user-specific video statuses
         const unsubscribeUserStatuses = onSnapshot(
           collection(db, `users/${currentUser.uid}/videoStatuses`),
           (snapshot) => {
@@ -64,49 +65,57 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           }
         );
 
-        // A single, top-level listener for technologies
-        const unsubscribeTechnologies = onSnapshot(
-          collection(db, 'technologies'),
-          async (techSnapshot) => {
-            setLoading(true);
-            const techPromises = techSnapshot.docs.map(async (techDoc) => {
-              const techData = techDoc.data();
+        // This is the master listener for the top-level 'technologies' collection.
+        const technologiesCollectionRef = collection(db, 'technologies');
+        const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
+          const promises = techSnapshot.docs.map(async (techDoc) => {
+            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string };
+            const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
+            
+            const creatorsSnapshot = await getDocs(creatorsCollectionRef);
+            const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+              const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+              const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
               
-              // For each technology, fetch its creators
-              const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
-              const creatorsSnapshot = await getDocs(creatorsCollectionRef);
-              
-              const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
-                const creatorData = creatorDoc.data();
-                
-                // For each creator, fetch their videos
-                const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-                const videosSnapshot = await getDocs(videosCollectionRef);
-                
-                const videos = videosSnapshot.docs.map(videoDoc => ({
+              const videosSnapshot = await getDocs(videosCollectionRef);
+              const videos = videosSnapshot.docs.map(videoDoc => {
+                const videoData = videoDoc.data() as Omit<Video, 'id' | 'status'>;
+                return {
                   id: videoDoc.id,
-                  ...videoDoc.data(),
-                })) as Omit<Video, 'status'>[];
-                
-                return { id: creatorDoc.id, ...creatorData, videos } as Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]};
+                  ...videoData,
+                };
               });
               
-              const creators = await Promise.all(creatorPromises);
-              return { id: techDoc.id, ...techData, creators } as Omit<Technology, 'creators'|'icon'> & { creators: (Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]})[]};
+              return {
+                id: creatorDoc.id,
+                ...creatorData,
+                videos,
+              };
             });
+            
+            const creators = await Promise.all(creatorPromises);
+            
+            return {
+              id: techDoc.id,
+              ...techData,
+              creators,
+            };
+          });
 
-            const newTechnologies = await Promise.all(techPromises);
+          Promise.all(promises).then(newTechnologies => {
             setTechnologies(newTechnologies as any); // Cast because icon is added in useMemo
             setLoading(false);
-          }
-        );
+          });
+        });
 
         return () => {
           unsubscribeUserStatuses();
           unsubscribeTechnologies();
         };
       } else {
-        // No user, clear all data
+        // No user, clear all data and stop loading.
+        setUser(null);
+        setIsAdmin(false);
         setTechnologies([]);
         setUserStatuses({});
         setLoading(false);
@@ -114,7 +123,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribeAuth();
-  }, []); // useEffect dependency is empty as we only want this to run once on mount.
+  }, []);
 
 
   const processedTechnologies = useMemo(() => {
@@ -199,7 +208,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
 
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();

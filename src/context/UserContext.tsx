@@ -60,50 +60,59 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      
-      const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-        const techs: Technology[] = [];
-        for (const techDoc of snapshot.docs) {
-            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
-            
-            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-            const creators: Creator[] = [];
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+        setLoading(true);
+        setUser(currentUser);
+        setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
 
-            for (const creatorDoc of creatorsSnapshot.docs) {
-                const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                    id: videoDoc.id,
-                    ...(videoDoc.data() as Omit<Video, 'id'>)
-                }));
-                creators.push({ id: creatorDoc.id, ...creatorData, videos });
+        const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (snapshot) => {
+            const techs: Technology[] = [];
+            for (const techDoc of snapshot.docs) {
+                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
+                
+                const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+                const creators: Creator[] = [];
+
+                for (const creatorDoc of creatorsSnapshot.docs) {
+                    const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                    const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                    const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                        id: videoDoc.id,
+                        ...(videoDoc.data() as Omit<Video, 'id'>)
+                    }));
+                    creators.push({ id: creatorDoc.id, ...creatorData, videos });
+                }
+                techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
             }
-            techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
-        }
-        
-        let userStatuses: Record<string, Video['status']> = {};
-        if (currentUser) {
-            const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
-            statusesSnapshot.forEach(doc => {
-                userStatuses[doc.id] = doc.data().status;
-            });
-        }
-        
-        setTechnologies(processTechnologies(techs, userStatuses));
-        setLoading(false);
-      }, (error) => {
-        console.error("Firestore snapshot error:", error);
-        setLoading(false);
-      });
+            
+            let userStatuses: Record<string, Video['status']> = {};
+            if (currentUser) {
+                try {
+                    const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
+                    statusesSnapshot.forEach(doc => {
+                        userStatuses[doc.id] = doc.data().status;
+                    });
+                } catch (e) {
+                    console.error("Error fetching user statuses:", e);
+                }
+            }
+            
+            setTechnologies(processTechnologies(techs, userStatuses));
+            // Only set loading to false after all data is fetched and processed
+            setLoading(false); 
+        }, (error) => {
+            console.error("Firestore snapshot error:", error);
+            setLoading(false);
+        });
 
-      return () => {
-        unsubscribeFirestore();
-      };
+        // This function will be called when the auth state changes (e.g., logout)
+        // or when the component unmounts.
+        return () => {
+            unsubscribeFirestore();
+        };
     });
 
+    // This is the cleanup function for the onAuthStateChanged listener itself.
     return () => {
       unsubscribeAuth();
     };
@@ -111,18 +120,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    setLoading(true);
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
-      setLoading(false);
     }
   };
 
   const logout = async () => {
     try {
       await signOut(auth);
+      setTechnologies([]); // Clear technologies on logout
     } catch (error) {
       console.error("Error signing out:", error);
     }

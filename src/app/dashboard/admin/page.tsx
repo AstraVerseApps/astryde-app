@@ -57,7 +57,7 @@ export default function AdminPage() {
     }
     try {
       await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
-      toast({ title: 'Success', description: 'Technology added successfully.' });
+      toast({ title: 'Technology Created', description: 'The new technology has been added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
     } catch (error) {
@@ -84,7 +84,7 @@ export default function AdminPage() {
         name: newCreatorName,
         avatar: 'https://placehold.co/100x100'
       });
-      toast({ title: 'Success', description: 'Creator added successfully.' });
+      toast({ title: 'Creator Created', description: 'The new creator has been added successfully.' });
       setNewCreatorName('');
       setSelectedTechForNewCreator('');
     } catch (error) {
@@ -114,7 +114,7 @@ export default function AdminPage() {
         thumbnail: 'https://placehold.co/1280x720',
         url: newVideoUrl,
       });
-      toast({ title: 'Success', description: 'Video added successfully.' });
+      toast({ title: 'Video Created', description: 'The new video has been added successfully.' });
       setNewVideoTitle('');
       setNewVideoDuration('');
       setNewVideoUrl('');

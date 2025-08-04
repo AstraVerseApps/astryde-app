@@ -108,7 +108,7 @@ export default function AdminPage() {
     setSelectedTechForDelete('');
     setSelectedCreatorForDelete('');
     setSelectedVideoForDelete('');
-    router.refresh();
+    window.location.reload();
   };
   
 

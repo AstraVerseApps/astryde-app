@@ -146,7 +146,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addCreator = async (techId: string, creator: Omit<Creator, 'id'>) => {
-    await addDoc(collection(db, `technologies/${techId}/creators`), creator);
+    const { videos, ...creatorData } = creator;
+    await addDoc(collection(db, `technologies/${techId}/creators`), creatorData);
   };
 
   const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {

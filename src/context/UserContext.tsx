@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, DocumentData } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
@@ -80,60 +80,48 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             setUserStatuses(newStatuses);
           }
         );
-
-        let activeTechSubscriptions: (() => void)[] = [];
-
+        
         const technologiesCollectionRef = collection(db, 'technologies');
-        const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, async (techSnapshot) => {
-          
-          activeTechSubscriptions.forEach(unsub => unsub());
-          activeTechSubscriptions = [];
+        const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
+            const techPromises = techSnapshot.docs.map(techDoc => {
+                return new Promise<Technology>((resolve) => {
+                    const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'> & { iconName: string };
+                    const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
 
-          const techPromises = techSnapshot.docs.map(async (techDoc) => {
-            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string };
-            
-            const creatorsPromise = new Promise<Creator[]>((resolveCreators) => {
-              const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
-              const unsubscribeCreators = onSnapshot(creatorsCollectionRef, async (creatorSnapshot) => {
-                
-                const creatorPromises = creatorSnapshot.docs.map(async (creatorDoc) => {
-                  const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-
-                  const videosPromise = new Promise<Video[]>((resolveVideos) => {
-                    const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-                    const unsubscribeVideos = onSnapshot(videosCollectionRef, (videosSnapshot) => {
-                      const videos = videosSnapshot.docs.map(videoDoc => ({
-                        id: videoDoc.id,
-                        ...(videoDoc.data() as Omit<Video, 'id' | 'status'>),
-                      }));
-                      resolveVideos(videos as Video[]);
+                    const unsubscribeCreators = onSnapshot(creatorsCollectionRef, (creatorSnapshot) => {
+                        const creatorPromises = creatorSnapshot.docs.map(creatorDoc => {
+                            return new Promise<Creator>((resolve) => {
+                                const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                                const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+                                
+                                const unsubscribeVideos = onSnapshot(videosCollectionRef, (videosSnapshot) => {
+                                    const videos = videosSnapshot.docs.map(videoDoc => ({
+                                        id: videoDoc.id,
+                                        ...videoDoc.data()
+                                    })) as Video[];
+                                    resolve({ id: creatorDoc.id, ...creatorData, videos });
+                                });
+                                // Note: We are not storing unsubscribeVideos because they are implicitly handled by the parent listeners.
+                                // When a creator is deleted, its listener stops, and this video listener is garbage collected.
+                            });
+                        });
+                        Promise.all(creatorPromises).then(creators => {
+                            resolve({ id: techDoc.id, ...techData, creators });
+                        });
                     });
-                    activeTechSubscriptions.push(unsubscribeVideos); 
-                  });
-                  
-                  const videos = await videosPromise;
-                  return { id: creatorDoc.id, ...creatorData, videos };
+                     // Note: Same as above for unsubscribeCreators
                 });
-
-                const creators = await Promise.all(creatorPromises);
-                resolveCreators(creators as Creator[]);
-              });
-              activeTechSubscriptions.push(unsubscribeCreators);
             });
 
-            const creators = await creatorsPromise;
-            return { id: techDoc.id, ...techData, creators };
-          });
-          
-          const newTechnologies = await Promise.all(techPromises);
-          setTechnologies(newTechnologies as Technology[]);
-          setLoading(false);
+            Promise.all(techPromises).then(newTechnologies => {
+                setTechnologies(newTechnologies);
+                setLoading(false);
+            });
         });
-        
+
         unsubscribeAll = () => {
           unsubscribeUserStatuses();
           unsubscribeTechnologies();
-          activeTechSubscriptions.forEach(unsub => unsub());
         };
 
       } else {

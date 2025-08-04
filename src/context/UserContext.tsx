@@ -98,22 +98,25 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const checkAndSeedDatabase = async () => {
+        const technologiesSnapshot = await getDocs(collection(db, 'technologies'));
+        if (technologiesSnapshot.empty) {
+            await seedDatabase();
+        }
+    };
+    checkAndSeedDatabase();
+  }, []);
+
+  useEffect(() => {
     let unsubscribeFirestore: () => void = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
         
-        // Unsubscribe from previous Firestore listener if it exists
         unsubscribeFirestore();
 
         unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-            if (snapshot.empty) {
-                await seedDatabase();
-                // Listener will re-run after seeding
-                return;
-            }
-
             const techs: Technology[] = [];
             for (const techDoc of snapshot.docs) {
                 const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
@@ -175,7 +178,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
         await setDoc(userStatusesRef, { status });
-        // The onSnapshot listener will handle the local state update automatically.
     } catch (e) {
         console.error("Failed to update status: ", e);
     }

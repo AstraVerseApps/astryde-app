@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithRedirect, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
@@ -132,7 +132,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
     }

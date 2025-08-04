@@ -46,11 +46,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
   
-  // This effect hook handles authentication state changes.
-  // It sets up and tears down other listeners based on the user's auth state.
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setLoading(true);
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       if (!currentUser) {
@@ -62,8 +59,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribeAuth();
   }, []);
   
-  // This effect hook handles fetching user-specific video statuses.
-  // It only runs when the user logs in or out.
   useEffect(() => {
     if (user) {
       const statusesCollectionRef = collection(db, `users/${user.uid}/videoStatuses`);
@@ -80,53 +75,44 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user]);
 
-  // This effect hook fetches the main technology data and sets up real-time listeners.
-  // It runs once when the component mounts.
   useEffect(() => {
+    setLoading(true);
     const technologiesCollectionRef = collection(db, 'technologies');
-    
-    const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, async (techSnapshot) => {
-        setLoading(true);
-        const techsWithCreatorsAndVideos = await Promise.all(
-            techSnapshot.docs.map(async (techDoc) => {
-                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-                
-                const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
-                const creatorsSnapshot = await getDocs(creatorsCollectionRef);
 
-                const creators = await Promise.all(
-                    creatorsSnapshot.docs.map(async (creatorDoc) => {
-                        const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                        
-                        const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-                        const videosSnapshot = await getDocs(videosCollectionRef);
-                        
-                        const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                            id: videoDoc.id,
-                            ...(videoDoc.data() as Omit<Video, 'id'>),
-                            status: 'Not Started' // Default status
-                        }));
+    const unsubscribe = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
+      const techPromises = techSnapshot.docs.map(async (techDoc) => {
+        const techData = techDoc.data();
+        const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
+        const creatorsSnapshot = await getDocs(creatorsCollectionRef);
 
-                        return { id: creatorDoc.id, ...creatorData, videos };
-                    })
-                );
+        const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+          const creatorData = creatorDoc.data();
+          const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+          const videosSnapshot = await getDocs(videosCollectionRef);
+          const videos = videosSnapshot.docs.map(videoDoc => ({
+            id: videoDoc.id,
+            ...videoDoc.data(),
+          })) as Video[];
+          return { id: creatorDoc.id, ...creatorData, videos } as Creator;
+        });
+        
+        const creators = await Promise.all(creatorPromises);
+        return { id: techDoc.id, ...techData, creators } as Technology;
+      });
 
-                return { 
-                    id: techDoc.id, 
-                    ...techData, 
-                    creators, 
-                    iconName: (techData as any).iconName || 'BrainCircuit' 
-                };
-            })
-        );
-        setTechnologies(techsWithCreatorsAndVideos);
+      Promise.all(techPromises).then(newTechnologies => {
+        setTechnologies(newTechnologies);
         setLoading(false);
+      }).catch(error => {
+        console.error("Error processing technologies:", error);
+        setLoading(false);
+      });
     }, (error) => {
-        console.error("Error fetching technologies:", error);
-        setLoading(false);
+      console.error("Error fetching technologies:", error);
+      setLoading(false);
     });
 
-    return () => unsubscribeTechnologies();
+    return () => unsubscribe();
   }, []);
 
 

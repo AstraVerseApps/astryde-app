@@ -11,11 +11,24 @@ import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/UserContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 const statusIcons: Record<Video['status'], React.ReactNode> = {
   'Not Started': <Circle className="h-4 w-4 text-muted-foreground" />,
   'In Progress': <PlayCircle className="h-4 w-4 text-yellow-400" />,
   'Completed': <CheckCircle2 className="h-4 w-4 text-green-500" />,
+};
+
+const getYouTubeEmbedUrl = (url: string) => {
+    if (!url) return '';
+    try {
+        const urlObj = new URL(url);
+        const videoId = urlObj.searchParams.get('v');
+        return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+    } catch (error) {
+        console.error('Invalid YouTube URL:', error);
+        return '';
+    }
 };
 
 export default function DashboardPage() {
@@ -69,32 +82,54 @@ export default function DashboardPage() {
         </div>
         <div className="space-y-4">
           {selectedCreator.videos.map((video) => (
-            <Card key={video.id} className="flex items-center justify-between p-4 group">
-              <div className="flex items-center gap-4">
-                <div className="w-40 h-24 bg-muted rounded-md overflow-hidden shrink-0">
-                  <Image data-ai-hint="code technology" src={video.thumbnail} alt={video.title} width={160} height={90} className="object-cover w-full h-full" />
-                </div>
-                <div>
-                  <p className="font-semibold text-lg">{video.title}</p>
-                  <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="hidden md:block">
-                  {statusIcons[video.status]}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">Set Status</Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </Card>
+             <Dialog key={video.id}>
+                <Card className="flex flex-col md:flex-row items-center justify-between p-4 group">
+                  <div className="flex items-center gap-4 w-full">
+                    <div className="w-40 h-24 bg-muted rounded-md overflow-hidden shrink-0">
+                      <Image data-ai-hint="code technology" src={video.thumbnail} alt={video.title} width={160} height={90} className="object-cover w-full h-full" />
+                    </div>
+                    <div className="flex-grow">
+                      <p className="font-semibold text-lg">{video.title}</p>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-4 md:mt-0 w-full md:w-auto justify-end">
+                     <div className="hidden md:block px-2">
+                        {statusIcons[video.status]}
+                     </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm">Set Status</Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <DialogTrigger asChild>
+                        <Button size="sm">
+                            <PlayCircle className="mr-2 h-4 w-4" />
+                            Watch Now
+                        </Button>
+                    </DialogTrigger>
+                  </div>
+                </Card>
+                <DialogContent className="max-w-4xl h-auto">
+                    <DialogHeader>
+                        <DialogTitle>{video.title}</DialogTitle>
+                    </DialogHeader>
+                    <div className="aspect-video">
+                        <iframe
+                            className="w-full h-full rounded-lg"
+                            src={getYouTubeEmbedUrl(video.url)}
+                            title={video.title}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                        ></iframe>
+                    </div>
+                </DialogContent>
+            </Dialog>
           ))}
         </div>
       </div>

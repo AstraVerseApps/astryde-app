@@ -98,64 +98,58 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    let rawTechnologies: Technology[] = [];
-    let userStatuses: Record<string, Video['status']> = {};
-
-    const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-        if (snapshot.empty) {
-            await seedDatabase();
-            // The snapshot listener will be re-triggered after seeding
-            return;
-        }
-
-        const techs: Technology[] = [];
-        for (const techDoc of snapshot.docs) {
-            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
-            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-            const creators: Creator[] = [];
-
-            for (const creatorDoc of creatorsSnapshot.docs) {
-                const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                    id: videoDoc.id,
-                    ...(videoDoc.data() as Omit<Video, 'id'>)
-                }));
-                creators.push({ id: creatorDoc.id, ...creatorData, videos });
-            }
-            techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
-        }
-        rawTechnologies = techs;
-        // Process technologies with the current user statuses
-        setTechnologies(processTechnologies(rawTechnologies, userStatuses));
-        setLoading(false); // Set loading to false after initial data load
-    });
+    let unsubscribeFirestore: () => void = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
         setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+        
+        // Unsubscribe from previous Firestore listener if it exists
+        unsubscribeFirestore();
 
-        if (currentUser) {
-            const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
-            const statuses: Record<string, Video['status']> = {};
-            statusesSnapshot.forEach(doc => {
-                statuses[doc.id] = doc.data().status;
-            });
-            userStatuses = statuses;
-        } else {
-            userStatuses = {};
-        }
-        // Reprocess technologies with new user statuses
-        setTechnologies(processTechnologies(rawTechnologies, userStatuses));
-        setLoading(false); // Also set loading to false on auth state change
+        unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
+            if (snapshot.empty) {
+                await seedDatabase();
+                // Listener will re-run after seeding
+                return;
+            }
+
+            const techs: Technology[] = [];
+            for (const techDoc of snapshot.docs) {
+                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
+                const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+                const creators: Creator[] = [];
+
+                for (const creatorDoc of creatorsSnapshot.docs) {
+                    const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                    const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                    const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                        id: videoDoc.id,
+                        ...(videoDoc.data() as Omit<Video, 'id'>)
+                    }));
+                    creators.push({ id: creatorDoc.id, ...creatorData, videos });
+                }
+                techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
+            }
+            
+            let userStatuses: Record<string, Video['status']> = {};
+            if (currentUser) {
+                const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
+                statusesSnapshot.forEach(doc => {
+                    userStatuses[doc.id] = doc.data().status;
+                });
+            }
+            
+            setTechnologies(processTechnologies(techs, userStatuses));
+            setLoading(false);
+        });
     });
 
     return () => {
         unsubscribeAuth();
         unsubscribeFirestore();
     };
-}, []);
+  }, []);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -181,17 +175,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
         await setDoc(userStatusesRef, { status });
-        // Optimistically update local state
-        setTechnologies(prevTechs => {
-            const newTechs = prevTechs.map(t => ({
-                ...t,
-                creators: t.creators.map(c => ({
-                    ...c,
-                    videos: c.videos.map(v => v.id === videoId ? { ...v, status } : v)
-                }))
-            }));
-            return processTechnologies(newTechs, { [videoId]: status });
-        });
+        // The onSnapshot listener will handle the local state update automatically.
     } catch (e) {
         console.error("Failed to update status: ", e);
     }

@@ -151,16 +151,15 @@ export default function AdminPage() {
             }
         }
         toast({ title: "Success", description: "Content deleted successfully." });
+        setDeleteType('');
+        setSelectedTechForDelete('');
+        setSelectedCreatorForDelete('');
+        setSelectedVideoForDelete('');
+        router.refresh();
     } catch (error) {
         toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
         console.error("Deletion failed:", error);
     }
-    
-    setDeleteType('');
-    setSelectedTechForDelete('');
-    setSelectedCreatorForDelete('');
-    setSelectedVideoForDelete('');
-    router.refresh();
   };
   
 
@@ -458,5 +457,3 @@ export default function AdminPage() {
     </>
   );
 }
-
-    

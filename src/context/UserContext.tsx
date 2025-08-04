@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
@@ -38,9 +38,10 @@ const seedDatabase = async () => {
 
             initialTechnologies.forEach(tech => {
                 const techDocRef = doc(db, 'technologies', tech.id);
+                // Exclude icon component, only store iconName
                 const { creators, icon, ...techData } = tech;
                 const iconName = (icon as any).displayName || 'BrainCircuit';
-                batch.set(techDocRef, { ...techData, name: tech.name, description: tech.description, iconName });
+                batch.set(techDocRef, { ...techData, iconName });
 
                 tech.creators.forEach(creator => {
                     const creatorDocRef = doc(db, `technologies/${tech.id}/creators`, creator.id);
@@ -69,7 +70,7 @@ interface UserContextType {
   isAdmin: boolean;
   technologies: Technology[];
   loading: boolean;
-  login: (email: string) => void;
+  signInWithGoogle: () => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => Promise<void>;
@@ -90,39 +91,37 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setLoading(true);
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      if (!currentUser) {
-        setLoading(false);
-      }
     });
 
     const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
         setLoading(true);
         if (snapshot.empty) {
           await seedDatabase();
-        }
-        const techs: Technology[] = [];
-        for (const techDoc of snapshot.docs) {
-            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-            const creators: Creator[] = [];
+        } else {
+            const techs: Technology[] = [];
+            for (const techDoc of snapshot.docs) {
+                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
+                const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+                const creators: Creator[] = [];
 
-            for (const creatorDoc of creatorsSnapshot.docs) {
-                const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                    id: videoDoc.id,
-                    ...(videoDoc.data() as Omit<Video, 'id'>)
-                }));
-                creators.push({ id: creatorDoc.id, ...creatorData, videos });
+                for (const creatorDoc of creatorsSnapshot.docs) {
+                    const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+                    const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                    const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                        id: videoDoc.id,
+                        ...(videoDoc.data() as Omit<Video, 'id'>)
+                    }));
+                    creators.push({ id: creatorDoc.id, ...creatorData, videos });
+                }
+                techs.push({ id: techDoc.id, ...techData, creators });
             }
-            techs.push({ id: techDoc.id, ...techData, creators });
+            setTechnologies(processTechnologies(techs));
         }
-        setTechnologies(processTechnologies(techs));
         setLoading(false);
     });
-
 
     return () => {
       unsubscribeAuth();
@@ -130,20 +129,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const login = (email: string) => {
-    const mockUser = {
-      uid: 'mock-uid',
-      email: email,
-      displayName: email.split('@')[0],
-      photoURL: ''
-    } as User;
-    setUser(mockUser);
-    setIsAdmin(mockUser.email === 'astrydeapp@gmail.com');
+  const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Error signing in with Google:", error);
+    }
   };
 
   const logout = async () => {
-    setUser(null);
-    setIsAdmin(false);
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   const updateVideoStatus = async (videoId: string, status: Video['status']) => {
@@ -213,7 +213,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         isAdmin, 
         technologies,
         loading,
-        login, 
+        signInWithGoogle, 
         logout, 
         updateVideoStatus,
         addTechnology,

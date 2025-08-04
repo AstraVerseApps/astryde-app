@@ -90,69 +90,72 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This effect handles the redirect result from Google Sign-In.
+    // This effect handles the auth state change and Firestore data fetching.
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      setLoading(true); // Start loading when auth state changes
+      setUser(currentUser);
+      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+      
+      // If there's a user, set up the Firestore listener.
+      // Otherwise, we can assume no data needs to be fetched.
+      if (currentUser) {
+        // You might want to move Firestore setup here if it depends on the user.
+      }
+      setLoading(false); // Stop loading after user is set
+    });
+
+    // Handle the redirect result separately on initial load.
     getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          // User is signed in.
-          // The onAuthStateChanged observer will handle the user state update.
-          console.log('Redirect result processed.');
-        }
-      })
       .catch((error) => {
-        console.error('Error processing redirect result:', error);
+        console.error("Error processing redirect result:", error);
       })
       .finally(() => {
-        // Continue with the rest of the initialization.
-        const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-          setLoading(true);
-          setUser(currentUser);
-          setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-          // Firestore subscription should only run after auth state is determined.
-          setupFirestore();
-        });
-
-        // Detach the listener when the component unmounts
-        return () => unsubscribeAuth();
+        // The onAuthStateChanged listener will handle the user state update.
+        // We might need to adjust loading state here if needed, but onAuthStateChanged should cover it.
       });
 
-    const setupFirestore = () => {
-      const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
-          setLoading(true);
-          if (snapshot.empty) {
-            await seedDatabase();
-          } else {
-              const techs: Technology[] = [];
-              for (const techDoc of snapshot.docs) {
-                  const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-                  const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-                  const creators: Creator[] = [];
+    // Set up the Firestore listener regardless of auth state for public data
+    const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
+      if (snapshot.empty) {
+        await seedDatabase();
+      } else {
+        const techs: Technology[] = [];
+        for (const techDoc of snapshot.docs) {
+          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
+          const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+          const creators: Creator[] = [];
 
-                  for (const creatorDoc of creatorsSnapshot.docs) {
-                      const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                      const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                      const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                          id: videoDoc.id,
-                          ...(videoDoc.data() as Omit<Video, 'id'>)
-                      }));
-                      creators.push({ id: creatorDoc.id, ...creatorData, videos });
-                  }
-                  techs.push({ id: techDoc.id, ...techData, creators });
-              }
-              setTechnologies(processTechnologies(techs));
+          for (const creatorDoc of creatorsSnapshot.docs) {
+            const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+            const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+            const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+              id: videoDoc.id,
+              ...(videoDoc.data() as Omit<Video, 'id'>)
+            }));
+            creators.push({ id: creatorDoc.id, ...creatorData, videos });
           }
-          setLoading(false);
-      });
-      return () => unsubscribeFirestore();
-    }
+          techs.push({ id: techDoc.id, ...techData, creators });
+        }
+        setTechnologies(processTechnologies(techs));
+      }
+    });
+
+    // Cleanup both listeners on unmount
+    return () => {
+      unsubscribeAuth();
+      unsubscribeFirestore();
+    };
   }, []);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
+    // Setting loading to true here can provide immediate UI feedback
+    setLoading(true);
     try {
       await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
+      setLoading(false); // Reset loading state on error
     }
   };
 

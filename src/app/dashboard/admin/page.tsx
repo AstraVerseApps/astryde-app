@@ -11,12 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useUser } from '@/context/UserContext';
-import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminPage() {
   const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo } = useUser();
-  const router = useRouter();
   const { toast } = useToast();
 
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
@@ -454,5 +452,3 @@ export default function AdminPage() {
     </>
   );
 }
-
-    

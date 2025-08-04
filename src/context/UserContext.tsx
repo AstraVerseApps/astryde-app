@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, collectionGroup, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
@@ -47,56 +47,66 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
   
   useEffect(() => {
-    setLoading(true);
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       
       if (currentUser) {
-        // User-specific data listeners
-        const statusesCollectionRef = collection(db, `users/${currentUser.uid}/videoStatuses`);
-        const unsubscribeUserStatuses = onSnapshot(statusesCollectionRef, (snapshot) => {
-          const statuses: Record<string, Video['status']> = {};
-          snapshot.forEach(doc => {
-            statuses[doc.id] = doc.data().status;
-          });
-          setUserStatuses(statuses);
-        });
+        // All data loading is now contingent on the user
+        const unsubscribeUserStatuses = onSnapshot(
+          collection(db, `users/${currentUser.uid}/videoStatuses`),
+          (snapshot) => {
+            const statuses: Record<string, Video['status']> = {};
+            snapshot.forEach(doc => {
+              statuses[doc.id] = doc.data().status;
+            });
+            setUserStatuses(statuses);
+          }
+        );
 
-        // Global content listeners
-        const technologiesCollectionRef = collection(db, 'technologies');
-        const unsubscribeTechnologies = onSnapshot(technologiesCollectionRef, (techSnapshot) => {
+        // A single, top-level listener for technologies
+        const unsubscribeTechnologies = onSnapshot(
+          collection(db, 'technologies'),
+          async (techSnapshot) => {
+            setLoading(true);
             const techPromises = techSnapshot.docs.map(async (techDoc) => {
-                const techData = techDoc.data();
-                const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
+              const techData = techDoc.data();
+              
+              // For each technology, fetch its creators
+              const creatorsCollectionRef = collection(db, `technologies/${techDoc.id}/creators`);
+              const creatorsSnapshot = await getDocs(creatorsCollectionRef);
+              
+              const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+                const creatorData = creatorDoc.data();
                 
-                const creatorsSnapshot = await getDocs(creatorsCollectionRef);
-                const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
-                    const creatorData = creatorDoc.data();
-                    const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-                    const videosSnapshot = await getDocs(videosCollectionRef);
-                    const videos = videosSnapshot.docs.map(videoDoc => ({
-                        id: videoDoc.id,
-                        ...videoDoc.data(),
-                    })) as Video[];
-                    return { id: creatorDoc.id, ...creatorData, videos } as Creator;
-                });
+                // For each creator, fetch their videos
+                const videosCollectionRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+                const videosSnapshot = await getDocs(videosCollectionRef);
                 
-                const creators = await Promise.all(creatorPromises);
-                return { id: techDoc.id, ...techData, creators } as Technology;
+                const videos = videosSnapshot.docs.map(videoDoc => ({
+                  id: videoDoc.id,
+                  ...videoDoc.data(),
+                })) as Omit<Video, 'status'>[];
+                
+                return { id: creatorDoc.id, ...creatorData, videos } as Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]};
+              });
+              
+              const creators = await Promise.all(creatorPromises);
+              return { id: techDoc.id, ...techData, creators } as Omit<Technology, 'creators'|'icon'> & { creators: (Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]})[]};
             });
 
-            Promise.all(techPromises).then(newTechnologies => {
-              setTechnologies(newTechnologies);
-              if (loading) setLoading(false);
-            });
-        });
+            const newTechnologies = await Promise.all(techPromises);
+            setTechnologies(newTechnologies as any); // Cast because icon is added in useMemo
+            setLoading(false);
+          }
+        );
 
         return () => {
           unsubscribeUserStatuses();
           unsubscribeTechnologies();
         };
       } else {
+        // No user, clear all data
         setTechnologies([]);
         setUserStatuses({});
         setLoading(false);
@@ -104,7 +114,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribeAuth();
-  }, [loading]);
+  }, []); // useEffect dependency is empty as we only want this to run once on mount.
 
 
   const processedTechnologies = useMemo(() => {
@@ -115,7 +125,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           ...creator,
           videos: creator.videos.map((video: Video) => ({
               ...video,
-              status: userStatuses[video.id] || video.status || 'Not Started',
+              status: userStatuses[video.id] || 'Not Started',
           })),
       })),
     }));

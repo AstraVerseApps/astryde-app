@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
@@ -22,10 +22,17 @@ const getIconComponent = (iconName?: string) => {
     return iconMap[iconName];
 };
 
-const processTechnologies = (docs: any[]): Technology[] => {
-    return docs.map(doc => ({
-      ...doc,
-      icon: getIconComponent(doc.iconName),
+const processTechnologies = (docs: any[], userStatuses: Record<string, Video['status']> = {}): Technology[] => {
+    return docs.map(tech => ({
+      ...tech,
+      icon: getIconComponent(tech.iconName),
+      creators: tech.creators.map((creator: Creator) => ({
+          ...creator,
+          videos: creator.videos.map((video: Video) => ({
+              ...video,
+              status: userStatuses[video.id] || video.status || 'Not Started',
+          })),
+      })),
     }));
 };
 
@@ -50,7 +57,8 @@ const seedDatabase = async () => {
 
                     creator.videos.forEach(video => {
                         const videoDocRef = doc(db, `technologies/${tech.id}/creators/${creator.id}/videos`, video.id);
-                        batch.set(videoDocRef, video);
+                        const { status, ...videoData } = video;
+                        batch.set(videoDocRef, { ...videoData, status: 'Not Started'});
                     });
                 });
             });
@@ -87,23 +95,18 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    const unsubscribeAuth = onAuthStateChanged(auth, currentUser => {
-      setUser(currentUser);
-      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      setLoading(false);
-    });
-
     const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
       if (snapshot.empty) {
         await seedDatabase();
       } else {
         const techs: Technology[] = [];
         for (const techDoc of snapshot.docs) {
-          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
+          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'>;
           const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
           const creators: Creator[] = [];
 
@@ -116,17 +119,36 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             }));
             creators.push({ id: creatorDoc.id, ...creatorData, videos });
           }
-          techs.push({ id: techDoc.id, ...techData, creators });
+          techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName });
         }
-        setTechnologies(processTechnologies(techs));
+        setRawTechnologies(techs);
       }
+    });
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+      
+      if (currentUser) {
+        // User is signed in, load their progress
+        const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
+        const userStatuses: Record<string, Video['status']> = {};
+        statusesSnapshot.forEach(doc => {
+            userStatuses[doc.id] = doc.data().status;
+        });
+        setTechnologies(processTechnologies(rawTechnologies, userStatuses));
+      } else {
+        // User is signed out, use default statuses
+        setTechnologies(processTechnologies(rawTechnologies));
+      }
+      setLoading(false);
     });
 
     return () => {
       unsubscribeAuth();
       unsubscribeFirestore();
     };
-  }, []);
+  }, [rawTechnologies]);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -135,8 +157,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
-    } finally {
-        setLoading(false);
     }
   };
 
@@ -155,6 +175,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
             transaction.set(userStatusesRef, { status });
         });
+        // Optimistically update local state
+        setTechnologies(prevTechs => processTechnologies(prevTechs, {[videoId]: status}));
     } catch (e) {
         console.error("Transaction failed: ", e);
     }

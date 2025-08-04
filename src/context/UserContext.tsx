@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
@@ -64,7 +64,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
       
-      // Set up Firestore listener after we have user auth state
       const unsubscribeFirestore = onSnapshot(collection(db, "technologies"), async (snapshot) => {
         const techs: Technology[] = [];
         for (const techDoc of snapshot.docs) {

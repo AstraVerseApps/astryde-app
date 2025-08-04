@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged, signInWithRedirect, GoogleAuthProvider, signOut, getRedirectResult } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, getDocs, onSnapshot, writeBatch, runTransaction, getDoc, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
@@ -90,16 +90,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     const unsubscribeAuth = onAuthStateChanged(auth, currentUser => {
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-      setLoading(false);
-    });
-    
-    // Process the redirect result
-    getRedirectResult(auth).catch(error => {
-      // Handle errors here, such as user closing the popup.
-      console.error("Error processing redirect result:", error);
       setLoading(false);
     });
 
@@ -128,7 +122,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Cleanup both listeners on unmount
     return () => {
       unsubscribeAuth();
       unsubscribeFirestore();
@@ -139,10 +132,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const provider = new GoogleAuthProvider();
     setLoading(true);
     try {
-      await signInWithRedirect(auth, provider);
+      await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google:", error);
-      setLoading(false);
+    } finally {
+        setLoading(false);
     }
   };
 

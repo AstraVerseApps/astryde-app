@@ -40,10 +40,11 @@ export default function DashboardPage() {
             setSelectedCreator(null);
         }
     }
-  }, [technologies, selectedTech?.id, selectedCreator?.id]);
+  }, [technologies, selectedTech, selectedCreator]);
 
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
+    if (!selectedTech || !selectedCreator) return;
     updateVideoStatus(videoId, status);
   };
 

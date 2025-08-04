@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, WriteBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, query, WriteBatch, DocumentData } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
@@ -60,58 +60,61 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
       setUser(currentUser);
       setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+      
+      if (!currentUser) {
+        setTechnologies([]);
+        setLoading(false);
+        return;
+      }
 
-      const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (snapshot) => {
-          const techs: Technology[] = [];
-          for (const techDoc of snapshot.docs) {
-              const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
-              
-              const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-              const creators: Creator[] = [];
+      const unsubscribeFirestore = onSnapshot(query(collection(db, "technologies")), async (techSnapshot) => {
+        const techsPromises = techSnapshot.docs.map(async (techDoc) => {
+          const techData = techDoc.data() as Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName?: string };
 
-              for (const creatorDoc of creatorsSnapshot.docs) {
-                  const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                  const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                  const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                      id: videoDoc.id,
-                      ...(videoDoc.data() as Omit<Video, 'id'>)
-                  }));
-                  creators.push({ id: creatorDoc.id, ...creatorData, videos });
-              }
-              techs.push({ id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' });
+          const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+          const creatorsPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+            const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
+            const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+            const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+              id: videoDoc.id,
+              ...(videoDoc.data() as Omit<Video, 'id'>),
+            }));
+            return { id: creatorDoc.id, ...creatorData, videos };
+          });
+
+          const creators = await Promise.all(creatorsPromises);
+          return { id: techDoc.id, ...techData, creators, iconName: techData.iconName || 'BrainCircuit' };
+        });
+
+        const techs = await Promise.all(techsPromises);
+        
+        let userStatuses: Record<string, Video['status']> = {};
+        if (currentUser) {
+          try {
+            const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
+            statusesSnapshot.forEach(doc => {
+              userStatuses[doc.id] = doc.data().status;
+            });
+          } catch (e) {
+            console.error("Error fetching user statuses:", e);
           }
-          
-          let userStatuses: Record<string, Video['status']> = {};
-          if (currentUser) {
-              try {
-                  const statusesSnapshot = await getDocs(collection(db, `users/${currentUser.uid}/videoStatuses`));
-                  statusesSnapshot.forEach(doc => {
-                      userStatuses[doc.id] = doc.data().status;
-                  });
-              } catch (e) {
-                  console.error("Error fetching user statuses:", e);
-              }
-          }
-          
-          setTechnologies(processTechnologies(techs, userStatuses));
-          setLoading(false); 
+        }
+        
+        setTechnologies(processTechnologies(techs, userStatuses));
+        setLoading(false); 
       }, (error) => {
-          console.error("Firestore snapshot error:", error);
-          setLoading(false);
+        console.error("Firestore snapshot error:", error);
+        setLoading(false);
       });
 
-      return () => {
-          unsubscribeFirestore();
-      };
+      return () => unsubscribeFirestore();
     });
 
-    return () => {
-      unsubscribeAuth();
-    };
+    return () => unsubscribeAuth();
   }, []);
 
   const signInWithGoogle = async () => {
@@ -218,5 +221,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

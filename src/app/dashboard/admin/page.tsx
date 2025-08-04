@@ -52,6 +52,7 @@ export default function AdminPage() {
       toast({ title: 'Success', description: 'Technology added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
+      router.refresh();
     } else {
         toast({
             variant: 'destructive',
@@ -105,6 +106,7 @@ export default function AdminPage() {
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
+      router.refresh();
     } else {
         toast({
             variant: 'destructive',
@@ -141,6 +143,7 @@ export default function AdminPage() {
     setSelectedTechForDelete('');
     setSelectedCreatorForDelete('');
     setSelectedVideoForDelete('');
+    router.refresh();
   };
   
 
@@ -438,7 +441,3 @@ export default function AdminPage() {
     </>
   );
 }
-
-    
-
-    

@@ -128,12 +128,10 @@ export default function AdminPage() {
         console.error("Deletion failed:", error);
     }
     
-    // Reset state and refresh the page to reflect changes
     setDeleteType('');
     setSelectedTechForDelete('');
     setSelectedCreatorForDelete('');
     setSelectedVideoForDelete('');
-    // Use router.refresh() for a soft refresh instead of a full page reload
     router.refresh();
   };
   
@@ -432,3 +430,5 @@ export default function AdminPage() {
     </>
   );
 }
+
+    

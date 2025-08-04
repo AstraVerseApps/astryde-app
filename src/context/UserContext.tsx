@@ -44,7 +44,7 @@ interface UserContextType {
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => Promise<void>;
-  addCreator: (techId: string, creator: Omit<Creator, 'id'>) => Promise<void>;
+  addCreator: (techId: string, creator: { name: string; avatar: string }) => Promise<void>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
@@ -145,7 +145,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, 'technologies'), { name, description, iconName });
   };
 
-  const addCreator = async (techId: string, creator: Omit<Creator, 'id'>) => {
+  const addCreator = async (techId: string, creator: { name: string; avatar: string }) => {
     await addDoc(collection(db, `technologies/${techId}/creators`), creator);
   };
 
@@ -217,5 +217,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

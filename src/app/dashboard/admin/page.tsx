@@ -76,7 +76,6 @@ export default function AdminPage() {
         await addCreator(selectedTechForNewCreator, { 
           name: newCreatorName, 
           avatar: 'https://placehold.co/100x100',
-          videos: [] 
         });
         toast({ title: 'Success', description: 'Creator added successfully.' });
         setNewCreatorName('');
@@ -457,5 +456,3 @@ export default function AdminPage() {
     </>
   );
 }
-
-    

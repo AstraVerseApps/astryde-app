@@ -1,8 +1,12 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
 
+// Import the functions you need from the SDKs you need
+import { initializeApp, getApp, getApps } from "firebase/app";
+import { getAnalytics, isSupported } from "firebase/analytics";
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCThrk3C5Kd4zhIVTGyIMUk1UvrpC4QUwg",
   authDomain: "astryde-app-b9181.firebaseapp.com",
@@ -15,7 +19,19 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getFirestore(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
-export { app, db, auth };
+// Initialize Analytics only on the client side
+const analytics = (async () => {
+    if (typeof window !== 'undefined') {
+        const supported = await isSupported();
+        if (supported) {
+            return getAnalytics(app);
+        }
+    }
+    return null;
+})();
+
+
+export { app, analytics, auth, db };

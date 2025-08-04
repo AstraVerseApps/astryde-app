@@ -45,7 +45,7 @@ const seedDatabase = async () => {
             const techDocRef = doc(db, 'technologies', tech.id);
             // Exclude icon component, only store iconName
             const { creators, icon, ...techData } = tech;
-            const iconName = (icon as any).displayName || 'BrainCircuit';
+            const iconName = tech.iconName || (typeof tech.icon !== 'string' ? (tech.icon as any).displayName : 'BrainCircuit') || 'BrainCircuit';
             batch.set(techDocRef, { ...techData, iconName });
 
             tech.creators.forEach(creator => {
@@ -103,9 +103,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             if (technologiesSnapshot.empty) {
                 await seedDatabase();
             } else {
-                // If the database is not empty but the flag isn't set, set it.
-                // This covers cases where data exists from a previous session
-                // before this logic was implemented.
                 localStorage.setItem('db_seeded', 'true');
             }
         }
@@ -117,9 +114,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     let unsubscribeFirestore: () => void = () => {};
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-        setUser(currentUser);
-        setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
         
         unsubscribeFirestore(); // Unsubscribe from previous listener if it exists
 
@@ -150,6 +145,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 });
             }
             
+            setUser(currentUser);
+            setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
             setTechnologies(processTechnologies(techs, userStatuses));
             setLoading(false);
         }, (error) => {

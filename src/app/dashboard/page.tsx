@@ -27,17 +27,20 @@ export default function DashboardPage() {
     // This effect runs when the 'technologies' data changes.
     // It checks if the currently selected tech or creator still exists in the new data.
     // If not, it resets the selection, preventing the UI from showing stale data.
-    if (selectedTech && !technologies.find(t => t.id === selectedTech.id)) {
-      setSelectedTech(null);
-      setSelectedCreator(null);
-    }
-    if (selectedCreator) {
-        const tech = technologies.find(t => t.id === selectedTech?.id);
-        if (!tech || !tech.creators.find(c => c.id === selectedCreator.id)) {
+    if (selectedTech) {
+        const updatedTech = technologies.find(t => t.id === selectedTech.id);
+        if (updatedTech) {
+            setSelectedTech(updatedTech);
+            if (selectedCreator) {
+                const updatedCreator = updatedTech.creators.find(c => c.id === selectedCreator.id);
+                setSelectedCreator(updatedCreator || null);
+            }
+        } else {
+            setSelectedTech(null);
             setSelectedCreator(null);
         }
     }
-  }, [technologies, selectedTech, selectedCreator]);
+  }, [technologies, selectedTech?.id, selectedCreator?.id]);
 
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
@@ -47,12 +50,6 @@ export default function DashboardPage() {
   const renderVideoList = () => {
     if (!selectedTech || !selectedCreator) return null;
 
-    // Ensure we have the latest creator data
-    const currentTech = technologies.find(t => t.id === selectedTech.id);
-    const currentCreator = currentTech?.creators.find(c => c.id === selectedCreator.id);
-
-    if (!currentCreator) return null;
-
     return (
       <div>
         <Button variant="ghost" onClick={() => setSelectedCreator(null)} className="mb-4">
@@ -61,16 +58,16 @@ export default function DashboardPage() {
         </Button>
         <div className="flex items-center gap-4 mb-6">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={currentCreator.avatar} />
-              <AvatarFallback>{currentCreator.name.charAt(0)}</AvatarFallback>
+              <AvatarImage src={selectedCreator.avatar} />
+              <AvatarFallback>{selectedCreator.name.charAt(0)}</AvatarFallback>
             </Avatar>
             <div>
-                <h2 className="text-2xl font-bold font-headline">{currentCreator.name}</h2>
+                <h2 className="text-2xl font-bold font-headline">{selectedCreator.name}</h2>
                 <p className="text-muted-foreground">Videos on {selectedTech.name}</p>
             </div>
         </div>
         <div className="space-y-4">
-          {currentCreator.videos.map((video) => (
+          {selectedCreator.videos.map((video) => (
             <Card key={video.id} className="flex items-center justify-between p-4 group">
               <div className="flex items-center gap-4">
                 <div className="w-40 h-24 bg-muted rounded-md overflow-hidden shrink-0">
@@ -106,11 +103,7 @@ export default function DashboardPage() {
   const renderCreatorGrid = () => {
     if (!selectedTech) return null;
     
-    // Ensure we have the latest tech data
-    const currentTech = technologies.find(t => t.id === selectedTech.id);
-    if (!currentTech) return null;
-
-    const Icon = currentTech.icon;
+    const Icon = selectedTech.icon;
     return (
       <div>
         <Button variant="ghost" onClick={() => {
@@ -122,10 +115,10 @@ export default function DashboardPage() {
         </Button>
         <div className="flex items-center gap-4 mb-6">
             <Icon className="h-10 w-10 text-primary icon-glow" />
-            <h2 className="text-3xl font-bold font-headline">{currentTech.name}</h2>
+            <h2 className="text-3xl font-bold font-headline">{selectedTech.name}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {currentTech.creators.map(creator => (
+          {selectedTech.creators.map(creator => (
             <Card key={creator.id} className="cursor-pointer hover:shadow-lg hover:border-primary transition-all" onClick={() => setSelectedCreator(creator)}>
               <CardHeader className="items-center text-center">
                   <Avatar className="h-24 w-24 mb-4">

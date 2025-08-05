@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, DocumentData } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 
@@ -37,7 +37,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setLoading(true);
       setUser(currentUser);
-       if (currentUser) {
+      if (currentUser) {
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
       } else {
@@ -45,16 +45,18 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setTechnologies([]);
         setUserStatuses({});
       }
-      setLoading(false);
+      // Delay setting loading to false until data fetching is complete
     });
     return () => authUnsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) {
-      return;
+        setLoading(false); // If no user, not loading
+        return;
     }
 
+    // Listener for user-specific video statuses
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
       const newStatuses: Record<string, Video['status']> = {};
@@ -77,38 +79,44 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     setLoading(true);
     const technologiesRef = collection(db, 'technologies');
-    const unsub = onSnapshot(technologiesRef, async (techSnapshot) => {
-        const newTechnologies = await Promise.all(
-            techSnapshot.docs.map(async (techDoc) => {
-                const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-                const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
-                const creatorsSnapshot = await getDocs(creatorsRef);
-                const creators = await Promise.all(
-                    creatorsSnapshot.docs.map(async (creatorDoc) => {
-                        const creatorData = creatorDoc.data() as Omit<Creator, 'id' | 'videos'>;
-                        const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-                        const videosSnapshot = await getDocs(videosRef);
-                        const videos = videosSnapshot.docs.map((videoDoc) => {
-                            const videoData = videoDoc.data() as Omit<Video, 'id' | 'status'>;
-                            return {
-                                id: videoDoc.id,
-                                ...videoData,
-                                status: 'Not Started', // Default status
-                            };
-                        });
-                        return { id: creatorDoc.id, ...creatorData, videos };
-                    })
-                );
-                return { id: techDoc.id, ...techData, creators };
-            })
-        );
-        setTechnologies(newTechnologies);
-        setLoading(false);
+    
+    // This is the master listener for all content.
+    const techUnsubscribe = onSnapshot(technologiesRef, (techSnapshot) => {
+        const techPromises = techSnapshot.docs.map(async (techDoc) => {
+            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
+            const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
+            
+            const creatorsSnapshot = await getDocs(creatorsRef);
+            const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
+                const creatorData = creatorDoc.data() as Omit<Creator, 'id'|'videos'>;
+                const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+
+                const videosSnapshot = await getDocs(videosRef);
+                const videos = videosSnapshot.docs.map((videoDoc) => {
+                    const videoData = videoDoc.data() as Omit<Video, 'id'|'status'>;
+                    return {
+                        id: videoDoc.id,
+                        ...videoData,
+                        status: 'Not Started'
+                    }
+                });
+
+                return { id: creatorDoc.id, ...creatorData, videos };
+            });
+
+            const creators = await Promise.all(creatorPromises);
+            return { id: techDoc.id, ...techData, creators };
+        });
+
+        Promise.all(techPromises).then(newTechnologies => {
+            setTechnologies(newTechnologies);
+            setLoading(false);
+        });
     });
 
-    return () => unsub();
+    return () => techUnsubscribe();
   }, [user]);
-
+  
   const processedTechnologies = useMemo(() => {
     if (loading) return [];
     return technologies.map(tech => ({

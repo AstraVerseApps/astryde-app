@@ -1,12 +1,21 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
+
+interface BulkDataItem {
+    technology: string;
+    creator: string;
+    videoTitle: string;
+    duration: string;
+    url: string;
+    creationDate?: Date;
+}
 
 interface UserContextType {
   user: User | null;
@@ -16,12 +25,13 @@ interface UserContextType {
   signInWithGoogle: () => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
-  addTechnology: (tech: Omit<Technology, 'id' | 'creators'>) => Promise<void>;
-  addCreator: (techId: string, creator: { name: string; }) => Promise<void>;
+  addTechnology: (tech: Omit<Technology, 'id' | 'creators'>) => Promise<string>;
+  addCreator: (techId: string, creator: { name: string; }) => Promise<string>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp }) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
+  addBulkData: (data: BulkDataItem[]) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -34,6 +44,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
 
   useEffect(() => {
+    setLoading(true);
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -47,13 +58,19 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => authUnsubscribe();
   }, []);
 
+  const memoizedSetTechnologies = useCallback((newTechnologies: Technology[]) => {
+    setTechnologies(newTechnologies);
+  }, []);
+
   useEffect(() => {
     if (!user) {
       setTechnologies([]);
       setUserStatuses({});
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
       const newStatuses: Record<string, Video['status']> = {};
@@ -63,39 +80,34 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUserStatuses(newStatuses);
     });
 
-    const technologiesQuery = query(collection(db, 'technologies'));
-    const techUnsubscribe = onSnapshot(technologiesQuery, async (techSnapshot) => {
-      setLoading(true);
-      const newTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+    const techQuery = query(collection(db, 'technologies'));
+    const techUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
+      const promises = techSnapshot.docs.map(async (techDoc) => {
         const techData = { id: techDoc.id, ...techDoc.data() } as Omit<Technology, 'creators'>;
-        
-        const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
-        const creatorsSnapshot = await getDocs(creatorsQuery);
+        const creatorsSnapshot = await getDocs(query(collection(db, `technologies/${techDoc.id}/creators`)));
         const creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
           const creatorData = { id: creatorDoc.id, ...creatorDoc.data() } as Omit<Creator, 'videos'>;
-          
-          const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
-          const videosSnapshot = await getDocs(videosQuery);
+          const videosSnapshot = await getDocs(query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc")));
           const videos = videosSnapshot.docs.map(videoDoc => ({
             id: videoDoc.id,
-            ...videoDoc.data()
+            ...videoDoc.data(),
           } as Video));
-          
           return { ...creatorData, videos };
         }));
-
         return { ...techData, creators };
-      }));
-      setTechnologies(newTechnologies);
-      setLoading(false);
-    });
+      });
 
+      Promise.all(promises).then(newTechnologies => {
+        memoizedSetTechnologies(newTechnologies);
+        setLoading(false);
+      });
+    });
 
     return () => {
       statusesUnsubscribe();
       techUnsubscribe();
     };
-  }, [user]);
+  }, [user, memoizedSetTechnologies]);
 
   const processedTechnologies = useMemo(() => {
     return technologies.map(tech => ({
@@ -137,18 +149,20 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators'>) => {
+  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators'>): Promise<string> => {
     const { name, description } = tech;
-    await addDoc(collection(db, 'technologies'), { name, description });
+    const docRef = await addDoc(collection(db, 'technologies'), { name, description });
+    return docRef.id;
   };
 
-  const addCreator = async (techId: string, creator: { name: string; }) => {
+  const addCreator = async (techId: string, creator: { name: string; }): Promise<string> => {
     if (!techId) throw new Error("Technology ID is required to add a creator.");
     
-    await addDoc(collection(db, `technologies/${techId}/creators`), {
+    const docRef = await addDoc(collection(db, `technologies/${techId}/creators`), {
         name: creator.name,
         avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${creator.name.charAt(0)}`
     });
+    return docRef.id;
   };
 
   const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp }) => {
@@ -161,6 +175,34 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     };
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), videoData);
   };
+  
+  const addBulkData = async (data: BulkDataItem[]) => {
+      for (const item of data) {
+        let techId = technologies.find(t => t.name.toLowerCase() === item.technology.toLowerCase())?.id;
+        if (!techId) {
+            techId = await addTechnology({ name: item.technology, description: '' });
+        }
+
+        const tech = technologies.find(t => t.id === techId) ?? { creators: [] };
+        let creatorId = tech.creators.find(c => c.name.toLowerCase() === item.creator.toLowerCase())?.id;
+        if (!creatorId) {
+            creatorId = await addCreator(techId, { name: item.creator });
+        }
+
+        const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
+            title: item.videoTitle,
+            duration: item.duration,
+            url: item.url,
+        };
+
+        if (item.creationDate) {
+            videoData.createdAt = Timestamp.fromDate(item.creationDate);
+        }
+
+        await addVideo(techId, creatorId, videoData);
+    }
+  };
+
 
   const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {
     const q = query(collection(db, collectionPath));
@@ -213,6 +255,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         deleteTechnology,
         deleteCreator,
         deleteVideo,
+        addBulkData
     }}>
       {children}
     </UserContext.Provider>
@@ -226,5 +269,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

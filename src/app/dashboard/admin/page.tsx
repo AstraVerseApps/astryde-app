@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, UploadCloud, Trash2, CalendarIcon, Clock } from 'lucide-react';
+import { PlusCircle, UploadCloud, Trash2, CalendarIcon, Clock, FileUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -18,9 +18,10 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Timestamp } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 
 export default function AdminPage() {
-  const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo } = useUser();
+  const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo, addBulkData } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -39,6 +40,9 @@ export default function AdminPage() {
   const [newVideoDate, setNewVideoDate] = React.useState<Date | undefined>();
   const [newVideoHour, setNewVideoHour] = React.useState('');
   const [newVideoMinute, setNewVideoMinute] = React.useState('');
+
+  // Bulk upload state
+  const [excelFile, setExcelFile] = React.useState<File | null>(null);
 
 
   // Delete state
@@ -184,6 +188,49 @@ export default function AdminPage() {
           description: 'Could not add video. Please try again.',
       });
     }
+  };
+
+  const handleBulkUpload = () => {
+    if (!excelFile) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Please select an Excel file to upload.' });
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = e.target?.result;
+            const workbook = XLSX.read(data, { type: 'binary' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+
+            const bulkData = json.map((row: any) => ({
+                technology: row.Technology,
+                creator: row.Creator,
+                videoTitle: row.VideoTitle,
+                duration: row.Duration,
+                url: row.URL,
+                creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
+            }));
+
+            await addBulkData(bulkData);
+            toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
+            setExcelFile(null);
+            // Clear the file input visually
+            const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
+            if(fileInput) fileInput.value = '';
+
+        } catch (error) {
+            console.error("Failed to process Excel file:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });
+        }
+    };
+    reader.onerror = (error) => {
+        console.error("File reading error:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to read the selected file.' });
+    };
+    reader.readAsBinaryString(excelFile);
   };
 
 
@@ -426,6 +473,40 @@ export default function AdminPage() {
                 </Card>
             </CardContent>
         </Card>
+
+        {/* Bulk Upload Section */}
+        <Card>
+            <CardHeader>
+                <CardTitle>Bulk Upload Content</CardTitle>
+                <CardDescription>
+                    Add multiple videos at once by uploading an Excel file.
+                    The file must have columns: Technology, Creator, VideoTitle, Duration, URL, CreationDate (optional).
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Card className="border-dashed">
+                    <CardContent className="p-6 space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="excel-upload">Excel File (.xlsx)</Label>
+                            <Input 
+                                id="excel-upload"
+                                type="file"
+                                accept=".xlsx, .xls"
+                                onChange={(e) => setExcelFile(e.target.files ? e.target.files[0] : null)}
+                                className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                            />
+                        </div>
+                    </CardContent>
+                    <div className="p-6 pt-0">
+                        <Button className="w-full" onClick={handleBulkUpload} disabled={!excelFile}>
+                            <FileUp className="mr-2 h-4 w-4" />
+                            Upload and Process
+                        </Button>
+                    </div>
+                </Card>
+            </CardContent>
+        </Card>
+
 
         {/* Delete Section */}
         <Card>

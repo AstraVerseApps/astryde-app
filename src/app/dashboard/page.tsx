@@ -76,8 +76,8 @@ export default function DashboardPage() {
     switch (view) {
       case 'technologies':
         return {
-          title: 'Your Learning Galaxy',
-          description: 'Select a technology to begin your journey through its universe of content.'
+          title: 'Chart Your Course',
+          description: 'Each technology is a star system waiting to be explored. Select one to begin your cosmic journey.'
         };
       case 'creators':
         return {
@@ -120,8 +120,8 @@ export default function DashboardPage() {
                     onClick={() => handleTechClick(tech)}
                     className="cursor-pointer transition-all hover:-translate-y-1 border-b-4"
                     style={{ 
-                      borderColor: `hsl(${colorVar})`,
-                      boxShadow: `0 0 20px hsl(${colorVar} / 0.1)`
+                      borderColor: `hsl(var(${colorVar}))`,
+                      boxShadow: `0 0 20px hsl(var(${colorVar}) / 0.1)`
                     }}
                 >
                     <CardHeader>

@@ -37,9 +37,6 @@ export default function DashboardPage() {
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
   useEffect(() => {
-    // This effect runs when the 'technologies' data changes.
-    // It checks if the currently selected tech or creator still exists in the new data.
-    // If not, it resets the selection, preventing the UI from showing stale data.
     if (selectedTech) {
         const updatedTech = technologies.find(t => t.id === selectedTech.id);
         if (updatedTech) {

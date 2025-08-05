@@ -47,6 +47,23 @@ export default function AdminPage() {
   const [selectedCreatorForDelete, setSelectedCreatorForDelete] = React.useState<string>('');
   const [selectedVideoForDelete, setSelectedVideoForDelete] = React.useState<string>('');
 
+  React.useEffect(() => {
+    const now = new Date();
+    const istOffset = 330 * 60000; // 5.5 hours in milliseconds
+    const istTime = new Date(now.getTime() + istOffset);
+    
+    // To display in UI, we need to get the date parts from the original 'now'
+    // and just set the time according to IST hours/minutes.
+    // A simpler way for the UI is just to use the browser's local time and let the server timestamp handle it if blank.
+    // But per request, let's set it to IST.
+    
+    const nowInIST = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+
+    setNewVideoDate(nowInIST);
+    setNewVideoHour(String(nowInIST.getHours()).padStart(2, '0'));
+    setNewVideoMinute(String(nowInIST.getMinutes()).padStart(2, '0'));
+  }, []);
+
   const handleTechChangeForVideo = (techId: string) => {
     setSelectedTechForNewVideo(techId);
     setSelectedCreatorForNewVideo(''); // Reset creator selection

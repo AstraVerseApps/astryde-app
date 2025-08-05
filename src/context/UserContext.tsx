@@ -1,10 +1,10 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, DocumentData } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 
@@ -35,85 +35,144 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setLoading(true);
       setUser(currentUser);
       if (currentUser) {
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
       } else {
         setIsAdmin(false);
-        setTechnologies([]);
-        setUserStatuses({});
       }
+      // Loading state will be managed by data fetching useEffects
     });
     return () => authUnsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) {
-        setLoading(false); 
-        return;
+      setTechnologies([]);
+      setUserStatuses({});
+      setLoading(false);
+      return;
     }
+
+    setLoading(true);
 
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
       const newStatuses: Record<string, Video['status']> = {};
-      snapshot.forEach(doc => {
+      snapshot.docs.forEach(doc => {
         newStatuses[doc.id] = doc.data().status;
       });
       setUserStatuses(newStatuses);
     });
 
-    return () => statusesUnsubscribe();
-  }, [user]);
-
-
-  useEffect(() => {
-    if (!user) {
+    const technologiesRef = collection(db, 'technologies');
+    const techUnsubscribe = onSnapshot(technologiesRef, (techSnapshot) => {
+      if (techSnapshot.empty) {
         setTechnologies([]);
         setLoading(false);
         return;
-    }
+      }
+      
+      const technologiesData: { [id: string]: Omit<Technology, 'creators'> } = {};
+      techSnapshot.docs.forEach(doc => {
+        technologiesData[doc.id] = { id: doc.id, ...(doc.data() as Omit<Technology, 'id' | 'creators'>) };
+      });
 
-    setLoading(true);
-    const technologiesRef = collection(db, 'technologies');
-    
-    const techUnsubscribe = onSnapshot(technologiesRef, async (techSnapshot) => {
-        const techPromises = techSnapshot.docs.map(async (techDoc) => {
-            const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-            
-            const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
-            const creatorsSnapshot = await getDocs(creatorsRef);
-            
-            const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
-                const creatorData = creatorDoc.data() as Omit<Creator, 'id'|'videos'>;
-                const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+      const allCreatorUnsubs: Unsubscribe[] = [];
 
-                const videosSnapshot = await getDocs(videosRef);
-                const videos = videosSnapshot.docs.map((videoDoc) => {
-                    const videoData = videoDoc.data() as Omit<Video, 'id'|'status'>;
-                    return {
-                        id: videoDoc.id,
-                        ...videoData,
-                        status: 'Not Started'
-                    }
+      techSnapshot.docs.forEach(techDoc => {
+        const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
+        const creatorUnsub = onSnapshot(creatorsRef, (creatorSnapshot) => {
+          
+          const creatorsData: { [id: string]: Omit<Creator, 'videos'> } = {};
+           if (creatorSnapshot.empty) {
+            setTechnologies(currentTechs => currentTechs.map(t => t.id === techDoc.id ? { ...technologiesData[techDoc.id], creators: [] } : t));
+          }
+          creatorSnapshot.docs.forEach(creatorDoc => {
+            creatorsData[creatorDoc.id] = { id: creatorDoc.id, ...(creatorDoc.data() as Omit<Creator, 'id' | 'videos'>) };
+          });
+
+          const allVideoUnsubs: Unsubscribe[] = [];
+          
+          creatorSnapshot.docs.forEach(creatorDoc => {
+            const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
+            const videoUnsub = onSnapshot(videosRef, (videoSnapshot) => {
+              
+              const videosData: Video[] = [];
+               videoSnapshot.docs.forEach(videoDoc => {
+                videosData.push({ 
+                  id: videoDoc.id, 
+                  ...(videoDoc.data() as Omit<Video, 'id'>),
+                   status: userStatuses[videoDoc.id] || 'Not Started'
                 });
+              });
+              
+              setTechnologies(currentTechs => {
+                const updatedTechs = currentTechs.map(t => ({...t})); // Deep copy
+                const techIndex = updatedTechs.findIndex(t => t.id === techDoc.id);
 
-                return { id: creatorDoc.id, ...creatorData, videos };
+                if (techIndex !== -1) {
+                  const creatorIndex = updatedTechs[techIndex].creators.findIndex(c => c.id === creatorDoc.id);
+                  if (creatorIndex !== -1) {
+                    updatedTechs[techIndex].creators[creatorIndex] = {
+                      ...updatedTechs[techIndex].creators[creatorIndex],
+                      videos: videosData,
+                    };
+                  } else {
+                     updatedTechs[techIndex].creators.push({
+                      ...creatorsData[creatorDoc.id],
+                      videos: videosData,
+                    });
+                  }
+                } else {
+                  updatedTechs.push({
+                    ...technologiesData[techDoc.id],
+                    creators: [{ ...creatorsData[creatorDoc.id], videos: videosData }]
+                  });
+                }
+                return updatedTechs;
+              });
+
+            });
+            allVideoUnsubs.push(videoUnsub);
+          });
+          
+          setTechnologies(currentTechs => {
+            const updatedTechs = [...currentTechs];
+            const techIndex = updatedTechs.findIndex(t => t.id === techDoc.id);
+            const newCreators = Object.values(creatorsData).map(c => {
+                const existingCreator = updatedTechs[techIndex]?.creators.find(ec => ec.id === c.id);
+                return existingCreator ? { ...c, videos: existingCreator.videos } : { ...c, videos: [] };
             });
 
-            const creators = await Promise.all(creatorPromises);
-            return { id: techDoc.id, ...techData, creators };
-        });
+            if (techIndex !== -1) {
+                 updatedTechs[techIndex] = {
+                    ...updatedTechs[techIndex],
+                    creators: newCreators
+                };
+            } else {
+                 updatedTechs.push({
+                    ...technologiesData[techDoc.id],
+                    creators: newCreators,
+                });
+            }
+            return updatedTechs;
+          });
 
-        const newTechnologies = await Promise.all(techPromises);
-        setTechnologies(newTechnologies);
-        setLoading(false);
+        });
+        allCreatorUnsubs.push(creatorUnsub);
+      });
+
+      setLoading(false); // Set loading to false once initial data structure is set up
     });
 
-    return () => techUnsubscribe();
+    return () => {
+      statusesUnsubscribe();
+      techUnsubscribe();
+    };
   }, [user]);
-  
+
   const processedTechnologies = useMemo(() => {
     return technologies.map(tech => ({
       ...tech,
@@ -126,7 +185,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       })),
     }));
   }, [technologies, userStatuses]);
-
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();

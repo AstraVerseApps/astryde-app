@@ -141,25 +141,22 @@ export default function AdminPage() {
         if (deleteType === 'technology' && selectedTechForDelete) {
             await deleteTechnology(selectedTechForDelete);
         } else if (deleteType === 'creator' && selectedCreatorForDelete) {
-            const techIdForCreator = technologies.find(t => t.creators.some(c => c.id === selectedCreatorForDelete))?.id;
-            if(techIdForCreator) {
-              await deleteCreator(techIdForCreator, selectedCreatorForDelete);
-            }
+            const [techId, creatorId] = selectedCreatorForDelete.split('/');
+            await deleteCreator(techId, creatorId);
         } else if (deleteType === 'video' && selectedVideoForDelete) {
-            const techIdForVideo = technologies.find(t => t.creators.some(c => c.videos.some(v => v.id === selectedVideoForDelete)))?.id;
-            const creatorIdForVideo = technologies.flatMap(t => t.creators).find(c => c.videos.some(v => v.id === selectedVideoForDelete))?.id;
-            if (techIdForVideo && creatorIdForVideo) {
-              await deleteVideo(techIdForVideo, creatorIdForVideo, selectedVideoForDelete);
-            }
+            const [techId, creatorId, videoId] = selectedVideoForDelete.split('/');
+            await deleteVideo(techId, creatorId, videoId);
         }
         toast({ title: "Success", description: "Content deleted successfully." });
+    } catch (error) {
+        toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
+        console.error("Deletion failed:", error);
+    } finally {
+        // Reset all states after deletion
         setDeleteType('');
         setSelectedTechForDelete('');
         setSelectedCreatorForDelete('');
         setSelectedVideoForDelete('');
-    } catch (error) {
-        toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
-        console.error("Deletion failed:", error);
     }
   };
   
@@ -197,11 +194,12 @@ export default function AdminPage() {
   }, [selectedTechForDelete, technologies]);
 
   const videosForDelete = React.useMemo(() => {
-     if (!selectedTechForDelete || !selectedCreatorForDelete) return [];
-     const tech = technologies.find(t => t.id === selectedTechForDelete);
-     const creator = tech?.creators.find(c => c.id === selectedCreatorForDelete);
+     if (!selectedCreatorForDelete) return [];
+     const [techId, creatorId] = selectedCreatorForDelete.split('/');
+     const tech = technologies.find(t => t.id === techId);
+     const creator = tech?.creators.find(c => c.id === creatorId);
      return creator ? creator.videos : [];
-  }, [selectedTechForDelete, selectedCreatorForDelete, technologies]);
+  }, [selectedCreatorForDelete, technologies]);
 
   return (
     <>
@@ -391,14 +389,14 @@ export default function AdminPage() {
                                                 setSelectedCreatorForDelete(value);
                                                 setSelectedVideoForDelete('');
                                             }} 
-                                            disabled={creatorsForDelete.length === 0}
+                                            disabled={!selectedTechForDelete || creatorsForDelete.length === 0}
                                         >
                                             <SelectTrigger id="creator-select-delete-cascade" className="border-destructive focus:ring-destructive">
                                                 <SelectValue placeholder="Select a creator" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {creatorsForDelete.map(creator => (
-                                                    <SelectItem key={creator.id} value={creator.id}>{creator.name}</SelectItem>
+                                                    <SelectItem key={creator.id} value={`${selectedTechForDelete}/${creator.id}`}>{creator.name}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -411,14 +409,14 @@ export default function AdminPage() {
                                         <Select 
                                             value={selectedVideoForDelete}
                                             onValueChange={setSelectedVideoForDelete}
-                                            disabled={videosForDelete.length === 0}
+                                            disabled={!selectedCreatorForDelete || videosForDelete.length === 0}
                                         >
                                             <SelectTrigger id="video-select-delete-cascade" className="border-destructive focus:ring-destructive">
                                                 <SelectValue placeholder="Select a video" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {videosForDelete.map(video => (
-                                                    <SelectItem key={video.id} value={video.id}>{video.title}</SelectItem>
+                                                    <SelectItem key={video.id} value={`${selectedCreatorForDelete}/${video.id}`}>{video.title}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -457,3 +455,5 @@ export default function AdminPage() {
       </div>
     </>
   );
+}
+    

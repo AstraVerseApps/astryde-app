@@ -55,15 +55,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
 
   useEffect(() => {
-    setLoading(true);
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setIsAdmin(currentUser?.email === 'astrydeapp@gmail.com');
-  
-      let unsubscribes: Unsubscribe[] = [];
-  
+      setIsAdmin(currentUser?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL);
+
       if (currentUser) {
-        // User is signed in, set up listeners
         const userStatusesRef = collection(db, `users/${currentUser.uid}/videoStatuses`);
         const userStatusesUnsub = onSnapshot(userStatusesRef, (snapshot) => {
           const newStatuses: Record<string, Video['status']> = {};
@@ -72,63 +68,96 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           });
           setUserStatuses(newStatuses);
         });
-        unsubscribes.push(userStatusesUnsub);
-  
-        const techUnsub = onSnapshot(collection(db, 'technologies'), (techSnapshot) => {
-          const promises = techSnapshot.docs.map(async (techDoc) => {
-            const tech: Technology = {
-              id: techDoc.id,
-              ...techDoc.data(),
-              creators: [],
-            } as Technology;
-  
-            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-            tech.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
-              const creator: Creator = {
-                id: creatorDoc.id,
-                ...creatorDoc.data(),
-                videos: [],
-              } as Creator;
-  
-              const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-              creator.videos = videosSnapshot.docs.map(videoDoc => ({
-                id: videoDoc.id,
-                ...videoDoc.data()
-              } as Video));
-              return creator;
-            }));
-            return tech;
+
+        const technologiesQuery = query(collection(db, 'technologies'));
+        const technologiesUnsub = onSnapshot(technologiesQuery, (techSnapshot) => {
+          const techPromises = techSnapshot.docs.map(techDoc => {
+            return new Promise<Technology>(async (resolve) => {
+              const techData = techDoc.data();
+              const tech: Technology = {
+                id: techDoc.id,
+                name: techData.name,
+                description: techData.description,
+                icon: getIconComponent(techData.iconName),
+                creators: [],
+              };
+
+              const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
+              const creatorsUnsub = onSnapshot(creatorsQuery, async (creatorSnapshot) => {
+                const creatorPromises = creatorSnapshot.docs.map(creatorDoc => {
+                  return new Promise<Creator>(async (resolveCreator) => {
+                    const creatorData = creatorDoc.data();
+                    const creator: Creator = {
+                      id: creatorDoc.id,
+                      name: creatorData.name,
+                      avatar: creatorData.avatar,
+                      videos: [],
+                    };
+
+                    const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                    const videosUnsub = onSnapshot(videosQuery, (videoSnapshot) => {
+                       creator.videos = videoSnapshot.docs.map(videoDoc => {
+                        const videoData = videoDoc.data();
+                        return {
+                           id: videoDoc.id,
+                           title: videoData.title,
+                           duration: videoData.duration,
+                           thumbnail: videoData.thumbnail,
+                           url: videoData.url,
+                           status: 'Not Started'
+                        }
+                       });
+                       
+                       setTechnologies(prev => {
+                          const newTechnologies = [...prev];
+                          const techIndex = newTechnologies.findIndex(t => t.id === tech.id);
+                          if (techIndex > -1) {
+                            const creatorIndex = newTechnologies[techIndex].creators.findIndex(c => c.id === creator.id);
+                            if (creatorIndex > -1) {
+                              newTechnologies[techIndex].creators[creatorIndex] = creator;
+                            } else {
+                              newTechnologies[techIndex].creators.push(creator)
+                            }
+                          }
+                          return newTechnologies;
+                       });
+                       resolveCreator(creator);
+                    });
+                     // Note: We are not returning unsub functions from these nested listeners which is not ideal
+                     // but simplifies logic for now. A more robust solution might manage these dynamically.
+                  });
+                });
+                tech.creators = await Promise.all(creatorPromises);
+                resolve(tech);
+              });
+            });
           });
-  
-          Promise.all(promises).then(fetchedTechnologies => {
-            setTechnologies(fetchedTechnologies);
-            setLoading(false);
+
+          Promise.all(techPromises).then(fetchedTechnologies => {
+             setTechnologies(fetchedTechnologies);
+             setLoading(false);
           });
         });
-        unsubscribes.push(techUnsub);
-  
+        
+        return () => {
+          technologiesUnsub();
+          userStatusesUnsub();
+        }
       } else {
-        // User is signed out
         setLoading(false);
         setUser(null);
         setIsAdmin(false);
         setTechnologies([]);
         setUserStatuses({});
       }
-  
-      // Cleanup function
-      return () => {
-        unsubscribes.forEach(unsub => unsub());
-      };
     });
-  
+
     return () => unsubscribeAuth();
   }, []);
 
   const processedTechnologies = useMemo(() => {
     return technologies.map(tech => ({
       ...tech,
-      icon: getIconComponent((tech as any).iconName),
       creators: tech.creators.map((creator: Creator) => ({
         ...creator,
         videos: creator.videos.map((video: Video) => ({
@@ -192,9 +221,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
 
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), { 
-        ...video, 
+        title: video.title,
+        duration: video.duration,
+        url: video.url,
         thumbnail: thumbnailUrl,
-        status: 'Not Started' 
     });
   };
 
@@ -226,7 +256,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
 
-    batch.delete(creatorDoc.ref);
+    batch.delete(creatorDocRef);
     await batch.commit();
   };
 

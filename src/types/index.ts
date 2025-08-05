@@ -1,5 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
+import type { Timestamp } from 'firebase/firestore';
 
 export type Video = {
   id: string;
@@ -9,6 +10,7 @@ export type Video = {
   status: 'Completed' | 'In Progress' | 'Not Started';
   creator?: string;
   technology?: string;
+  createdAt?: Timestamp;
 };
 
 export type Creator = {

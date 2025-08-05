@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 
@@ -96,8 +96,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           const allVideoUnsubs: Unsubscribe[] = [];
           
           creatorSnapshot.docs.forEach(creatorDoc => {
-            const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
-            const videoUnsub = onSnapshot(videosRef, (videoSnapshot) => {
+            const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
+            const videoUnsub = onSnapshot(videosQuery, (videoSnapshot) => {
               
               const videosData: Video[] = [];
                videoSnapshot.docs.forEach(videoDoc => {
@@ -232,6 +232,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         title: video.title,
         duration: video.duration,
         url: video.url,
+        createdAt: serverTimestamp(),
     });
   };
 

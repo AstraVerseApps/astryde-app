@@ -31,7 +31,7 @@ interface UserContextType {
   signInWithGoogle: () => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
-  addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => Promise<void>;
+  addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'>) => Promise<void>;
   addCreator: (techId: string, creator: { name: string; }) => Promise<void>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
@@ -66,14 +66,14 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchAllData = useCallback(async (uid: string) => {
     setLoading(true);
-
+  
     const statusesSnapshot = await getDocs(collection(db, `users/${uid}/videoStatuses`));
     const newStatuses: Record<string, Video['status']> = {};
     statusesSnapshot.forEach(doc => {
       newStatuses[doc.id] = doc.data().status;
     });
     setUserStatuses(newStatuses);
-
+  
     const techSnapshot = await getDocs(collection(db, 'technologies'));
     const newTechnologies = await Promise.all(
       techSnapshot.docs.map(async (techDoc) => {
@@ -164,9 +164,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => {
-    const { name, description, iconName } = tech;
-    await addDoc(collection(db, 'technologies'), { name, description, iconName });
+  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators' | 'icon'>) => {
+    const { name, description } = tech;
+    await addDoc(collection(db, 'technologies'), { name, description, iconName: 'BrainCircuit' });
   };
 
   const addCreator = async (techId: string, creator: { name: string; }) => {
@@ -250,3 +250,5 @@ export const useUser = () => {
   }
   return context;
 };
+
+    

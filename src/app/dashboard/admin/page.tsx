@@ -41,10 +41,16 @@ export default function AdminPage() {
 
   const handleTechChangeForVideo = (techId: string) => {
     setSelectedTechForNewVideo(techId);
-    const tech = technologies.find(t => t.id === techId);
-    setCreatorsForTech(tech ? tech.creators : []);
-    setSelectedCreatorForNewVideo('');
+    setSelectedCreatorForNewVideo(''); // Reset creator selection
+    setCreatorsForTech([]); // Immediately clear old creators
+
+    // Defer the update to allow React to process state changes
+    setTimeout(() => {
+        const tech = technologies.find(t => t.id === techId);
+        setCreatorsForTech(tech ? tech.creators : []);
+    }, 0);
   };
+
 
   const handleAddTechnology = async () => {
     if (!newTechName || !newTechDesc) {
@@ -56,7 +62,7 @@ export default function AdminPage() {
       return;
     }
     try {
-      await addTechnology({ name: newTechName, description: newTechDesc, iconName: 'BrainCircuit' });
+      await addTechnology({ name: newTechName, description: newTechDesc });
       toast({ title: 'Technology Created', description: 'The new technology has been added successfully.' });
       setNewTechName('');
       setNewTechDesc('');
@@ -451,3 +457,5 @@ export default function AdminPage() {
       </div>
     </>
   );
+
+    

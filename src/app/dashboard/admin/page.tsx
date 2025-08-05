@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, UploadCloud, Trash2, CalendarIcon } from 'lucide-react';
+import { PlusCircle, UploadCloud, Trash2, CalendarIcon, Clock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -37,6 +37,8 @@ export default function AdminPage() {
   const [selectedTechForNewVideo, setSelectedTechForNewVideo] = React.useState('');
   const [selectedCreatorForNewVideo, setSelectedCreatorForNewVideo] = React.useState('');
   const [newVideoDate, setNewVideoDate] = React.useState<Date | undefined>();
+  const [newVideoHour, setNewVideoHour] = React.useState('');
+  const [newVideoMinute, setNewVideoMinute] = React.useState('');
 
 
   // Delete state
@@ -125,8 +127,24 @@ export default function AdminPage() {
         url: newVideoUrl,
       };
 
-      if (newVideoDate) {
-        videoData.createdAt = Timestamp.fromDate(newVideoDate);
+      let finalDate: Date | undefined = newVideoDate;
+
+      if (finalDate) {
+        const hour = parseInt(newVideoHour, 10);
+        const minute = parseInt(newVideoMinute, 10);
+        if (!isNaN(hour)) finalDate.setHours(hour);
+        if (!isNaN(minute)) finalDate.setMinutes(minute);
+      } else if (newVideoHour || newVideoMinute) {
+        finalDate = new Date();
+        const hour = parseInt(newVideoHour, 10);
+        const minute = parseInt(newVideoMinute, 10);
+        if (!isNaN(hour)) finalDate.setHours(hour);
+        if (!isNaN(minute)) finalDate.setMinutes(minute);
+        if (isNaN(hour) && isNaN(minute)) finalDate = undefined;
+      }
+      
+      if (finalDate) {
+        videoData.createdAt = Timestamp.fromDate(finalDate);
       }
 
       await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, videoData);
@@ -139,6 +157,8 @@ export default function AdminPage() {
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
       setNewVideoDate(undefined);
+      setNewVideoHour('');
+      setNewVideoMinute('');
     } catch (error) {
        console.error('Failed to add video:', error);
        toast({
@@ -331,29 +351,53 @@ export default function AdminPage() {
                             <Input id="video-url" placeholder="https://www.youtube.com/watch?v=..." value={newVideoUrl} onChange={e => setNewVideoUrl(e.target.value)} />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="video-date">Creation Date (Optional)</Label>
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                            "w-full justify-start text-left font-normal",
-                                            !newVideoDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {newVideoDate ? format(newVideoDate, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={newVideoDate}
-                                        onSelect={setNewVideoDate}
-                                        initialFocus
+                            <Label htmlFor="video-date">Creation Timestamp (Optional)</Label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-full justify-start text-left font-normal",
+                                                !newVideoDate && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {newVideoDate ? format(newVideoDate, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0">
+                                        <Calendar
+                                            mode="single"
+                                            selected={newVideoDate}
+                                            onSelect={setNewVideoDate}
+                                            initialFocus
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                                <div className="flex items-center gap-2">
+                                    <Clock className="h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        type="number"
+                                        placeholder="HH"
+                                        value={newVideoHour}
+                                        onChange={e => setNewVideoHour(e.target.value)}
+                                        className="w-16"
+                                        min="0"
+                                        max="23"
                                     />
-                                </PopoverContent>
-                            </Popover>
+                                    <span>:</span>
+                                    <Input
+                                        type="number"
+                                        placeholder="MM"
+                                        value={newVideoMinute}
+                                        onChange={e => setNewVideoMinute(e.target.value)}
+                                        className="w-16"
+                                        min="0"
+                                        max="59"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </CardContent>
                      <div className="p-6 pt-0">

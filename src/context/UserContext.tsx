@@ -54,7 +54,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        setIsAdmin(currentUser.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL);
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        setIsAdmin(!!adminEmail && currentUser.email === adminEmail);
       } else {
         setIsAdmin(false);
       }
@@ -63,61 +64,63 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => authUnsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (!user) {
-        setTechnologies([]);
-        setLoading(false);
-        return;
-    }
-
+  const fetchAllData = useCallback(async (uid: string) => {
     setLoading(true);
 
-    const statusesUnsub = onSnapshot(collection(db, `users/${user.uid}/videoStatuses`), (snapshot) => {
-        const newStatuses: Record<string, Video['status']> = {};
-        snapshot.docs.forEach(doc => {
-            newStatuses[doc.id] = doc.data().status;
-        });
-        setUserStatuses(newStatuses);
+    const statusesSnapshot = await getDocs(collection(db, `users/${uid}/videoStatuses`));
+    const newStatuses: Record<string, Video['status']> = {};
+    statusesSnapshot.forEach(doc => {
+      newStatuses[doc.id] = doc.data().status;
+    });
+    setUserStatuses(newStatuses);
+
+    const techSnapshot = await getDocs(collection(db, 'technologies'));
+    const newTechnologies = await Promise.all(
+      techSnapshot.docs.map(async (techDoc) => {
+        const techData = techDoc.data();
+        const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+        
+        const creators = await Promise.all(
+          creatorsSnapshot.docs.map(async (creatorDoc) => {
+            const creatorData = creatorDoc.data();
+            const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+            const videos = videosSnapshot.docs.map(videoDoc => ({
+              id: videoDoc.id,
+              ...videoDoc.data()
+            } as Video));
+            
+            return { id: creatorDoc.id, ...creatorData, videos } as Creator;
+          })
+        );
+        
+        return {
+          id: techDoc.id,
+          ...techData,
+          icon: getIconComponent(techData.iconName),
+          creators,
+        } as Technology;
+      })
+    );
+    
+    setTechnologies(newTechnologies);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setTechnologies([]);
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(collection(db, 'technologies'), (snapshot) => {
+        // Any change in technologies collection will trigger a full refetch.
+        // This is simpler and more robust for this data structure.
+        fetchAllData(user.uid);
     });
 
-    const fetchAllData = async () => {
-        const techSnapshot = await getDocs(collection(db, 'technologies'));
-        const newTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
-            const techData = techDoc.data();
-            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
-
-            const creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
-                const creatorData = creatorDoc.data();
-                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
-                const videos = videosSnapshot.docs.map(videoDoc => ({
-                    id: videoDoc.id,
-                    ...videoDoc.data()
-                } as Omit<Video, 'status'>));
-
-                return { id: creatorDoc.id, ...creatorData, videos } as Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]};
-            }));
-
-            return {
-                id: techDoc.id,
-                ...techData,
-                icon: getIconComponent(techData.iconName),
-                creators,
-            } as Omit<Technology, 'creators'> & { creators: (Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]})[]};
-        }));
-        setTechnologies(newTechnologies as Technology[]);
-        setLoading(false);
-    };
-
-    const techUnsub = onSnapshot(collection(db, 'technologies'), (snapshot) => {
-        // A change in technologies collection happened, re-fetch everything
-        fetchAllData();
-    });
-
-    return () => {
-        statusesUnsub();
-        techUnsub();
-    };
-}, [user]);
+    return () => unsubscribe();
+  }, [user, fetchAllData]);
 
 
   const processedTechnologies = useMemo(() => {
@@ -208,7 +211,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
 
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();
@@ -242,7 +245,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 export const useUser = () => {
   const context = useContext(UserContext);
   if (context === undefined) {
-    throw new Error('useUser must be used within a UserProvider');
+    throw new new Error('useUser must be used within a UserProvider');
   }
   return context;
 };
+
+    

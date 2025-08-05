@@ -136,7 +136,6 @@ export default function DashboardPage() {
   const renderCreatorGrid = () => {
     if (!selectedTech) return null;
     
-    const Icon = selectedTech.icon;
     return (
       <div>
         <Button variant="ghost" onClick={() => {
@@ -147,7 +146,6 @@ export default function DashboardPage() {
           Back to Technologies
         </Button>
         <div className="flex items-center gap-4 mb-6">
-            <Icon className="h-10 w-10 text-primary icon-glow" />
             <h2 className="text-3xl font-bold font-headline">{selectedTech.name}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -171,12 +169,10 @@ export default function DashboardPage() {
   const renderTechnologyGrid = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
       {technologies.map(tech => {
-        const Icon = tech.icon;
         return (
             <Card key={tech.id} className="cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-transform duration-300" onClick={() => setSelectedTech(tech)}>
               <CardHeader>
                 <div className="flex items-center gap-4 mb-2">
-                    <Icon className="h-10 w-10 text-primary icon-glow" />
                     <CardTitle className="text-2xl font-headline">{tech.name}</CardTitle>
                 </div>
                 <CardDescription>{tech.description}</CardDescription>
@@ -229,5 +225,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    

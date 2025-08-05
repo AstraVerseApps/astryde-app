@@ -8,20 +8,7 @@ import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, get
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
-import { BrainCircuit, AppWindow, Cloud, Database } from 'lucide-react';
 import { useRouter }from 'next/navigation';
-
-const iconMap: Record<string, React.ElementType> = {
-  AppWindow,
-  Cloud,
-  Database,
-  BrainCircuit,
-};
-
-const getIconComponent = (iconName?: string) => {
-    if (!iconName || !iconMap[iconName]) return BrainCircuit;
-    return iconMap[iconName];
-};
 
 interface UserContextType {
   user: User | null;
@@ -31,7 +18,7 @@ interface UserContextType {
   signInWithGoogle: () => void;
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
-  addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'>) => Promise<void>;
+  addTechnology: (tech: Omit<Technology, 'id' | 'creators'>) => Promise<void>;
   addCreator: (techId: string, creator: { name: string; }) => Promise<void>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
@@ -55,7 +42,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUser(currentUser);
       if (currentUser) {
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-        setIsAdmin(!!adminEmail && currentUser.email === adminEmail);
+        setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
       } else {
         setIsAdmin(false);
       }
@@ -96,7 +83,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         return {
           id: techDoc.id,
           ...techData,
-          icon: getIconComponent(techData.iconName),
           creators,
         } as Technology;
       })
@@ -164,9 +150,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators' | 'icon'>) => {
+  const addTechnology = async (tech: Omit<Technology, 'id' | 'creators'>) => {
     const { name, description } = tech;
-    await addDoc(collection(db, 'technologies'), { name, description, iconName: 'BrainCircuit' });
+    await addDoc(collection(db, 'technologies'), { name, description });
   };
 
   const addCreator = async (techId: string, creator: { name: string; }) => {
@@ -250,5 +236,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

@@ -22,6 +22,5 @@ export type Technology = {
   id:string;
   name: string;
   description: string;
-  icon: LucideIcon | ((props: React.SVGProps<SVGSVGElement>) => JSX.Element);
   creators: Creator[];
 };

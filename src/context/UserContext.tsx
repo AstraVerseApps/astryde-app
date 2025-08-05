@@ -32,8 +32,8 @@ interface UserContextType {
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => Promise<void>;
-  addCreator: (techId: string, creator: { name: string; avatar: string; }) => Promise<void>;
-  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status' | 'thumbnail'>) => Promise<void>;
+  addCreator: (techId: string, creator: { name: string; }) => Promise<void>;
+  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
@@ -57,8 +57,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setIsAdmin(currentUser.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL);
       } else {
         setIsAdmin(false);
-        setTechnologies([]);
-        setUserStatuses({});
       }
       setLoading(false);
     });
@@ -82,7 +80,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setUserStatuses(newStatuses);
     });
 
-    const techUnsub = onSnapshot(collection(db, 'technologies'), async (techSnapshot) => {
+    const fetchAllData = async () => {
+        const techSnapshot = await getDocs(collection(db, 'technologies'));
         const newTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
             const techData = techDoc.data();
             const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
@@ -93,9 +92,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 const videos = videosSnapshot.docs.map(videoDoc => ({
                     id: videoDoc.id,
                     ...videoDoc.data()
-                } as Video));
+                } as Omit<Video, 'status'>));
 
-                return { id: creatorDoc.id, ...creatorData, videos } as Creator;
+                return { id: creatorDoc.id, ...creatorData, videos } as Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]};
             }));
 
             return {
@@ -103,10 +102,15 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 ...techData,
                 icon: getIconComponent(techData.iconName),
                 creators,
-            } as Technology;
+            } as Omit<Technology, 'creators'> & { creators: (Omit<Creator, 'videos'> & { videos: Omit<Video, 'status'>[]})[]};
         }));
-        setTechnologies(newTechnologies);
+        setTechnologies(newTechnologies as Technology[]);
         setLoading(false);
+    };
+
+    const techUnsub = onSnapshot(collection(db, 'technologies'), (snapshot) => {
+        // A change in technologies collection happened, re-fetch everything
+        fetchAllData();
     });
 
     return () => {
@@ -114,7 +118,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         techUnsub();
     };
 }, [user]);
-
 
 
   const processedTechnologies = useMemo(() => {
@@ -162,16 +165,16 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, 'technologies'), { name, description, iconName });
   };
 
-  const addCreator = async (techId: string, creator: { name: string; avatar: string; }) => {
+  const addCreator = async (techId: string, creator: { name: string; }) => {
     if (!techId) throw new Error("Technology ID is required to add a creator.");
     
     await addDoc(collection(db, `technologies/${techId}/creators`), {
         name: creator.name,
-        avatar: creator.avatar
+        avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${creator.name.charAt(0)}`
     });
   };
 
-  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status' | 'thumbnail'>) => {
+  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), { 
         title: video.title,
         duration: video.duration,

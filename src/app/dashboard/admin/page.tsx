@@ -25,10 +25,12 @@ export default function AdminPage() {
   const [newTechName, setNewTechName] = React.useState('');
   const [newTechDesc, setNewTechDesc] = React.useState('');
   const [newCreatorName, setNewCreatorName] = React.useState('');
+  const [newCreatorAvatar, setNewCreatorAvatar] = React.useState<File | null>(null);
   const [selectedTechForNewCreator, setSelectedTechForNewCreator] = React.useState('');
   const [newVideoTitle, setNewVideoTitle] = React.useState('');
   const [newVideoDuration, setNewVideoDuration] = React.useState('');
   const [newVideoUrl, setNewVideoUrl] = React.useState('');
+  const [newVideoThumbnail, setNewVideoThumbnail] = React.useState<File | null>(null);
   const [selectedTechForNewVideo, setSelectedTechForNewVideo] = React.useState('');
   const [selectedCreatorForNewVideo, setSelectedCreatorForNewVideo] = React.useState('');
 
@@ -71,22 +73,24 @@ export default function AdminPage() {
   };
 
   const handleAddCreator = async () => {
-    if (!selectedTechForNewCreator || !newCreatorName) {
+    if (!selectedTechForNewCreator || !newCreatorName || !newCreatorAvatar) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Please select a technology and provide a name for the creator.',
+        description: 'Please select a technology, provide a name, and upload an avatar for the creator.',
       });
       return;
     }
     try {
       await addCreator(selectedTechForNewCreator, {
         name: newCreatorName,
-        avatar: 'https://placehold.co/100x100'
+        avatar: newCreatorAvatar
       });
       toast({ title: 'Creator Created', description: 'The new creator has been added successfully.' });
       setNewCreatorName('');
+      setNewCreatorAvatar(null);
       setSelectedTechForNewCreator('');
+      router.refresh();
     } catch (error) {
       console.error('Failed to add creator:', error);
       toast({
@@ -99,11 +103,11 @@ export default function AdminPage() {
 
 
   const handleAddVideo = async () => {
-    if (!selectedTechForNewVideo || !selectedCreatorForNewVideo || !newVideoTitle || !newVideoUrl || !newVideoDuration) {
+    if (!selectedTechForNewVideo || !selectedCreatorForNewVideo || !newVideoTitle || !newVideoUrl || !newVideoDuration || !newVideoThumbnail) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Please fill in all required fields for the new video.',
+        description: 'Please fill in all required fields and upload a thumbnail for the new video.',
       });
       return;
     }
@@ -111,16 +115,18 @@ export default function AdminPage() {
       await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
         title: newVideoTitle,
         duration: newVideoDuration,
-        thumbnail: 'https://placehold.co/1280x720',
+        thumbnail: newVideoThumbnail,
         url: newVideoUrl,
       });
       toast({ title: 'Video Created', description: 'The new video has been added successfully.' });
       setNewVideoTitle('');
       setNewVideoDuration('');
       setNewVideoUrl('');
+      setNewVideoThumbnail(null);
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
+      router.refresh();
     } catch (error) {
        console.error('Failed to add video:', error);
        toast({
@@ -260,6 +266,10 @@ export default function AdminPage() {
                             <Label htmlFor="creator-name">Creator Name</Label>
                             <Input id="creator-name" placeholder="e.g. Dr. Nova" value={newCreatorName} onChange={e => setNewCreatorName(e.target.value)} />
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="creator-avatar">Creator Avatar</Label>
+                            <Input id="creator-avatar" type="file" onChange={e => setNewCreatorAvatar(e.target.files ? e.target.files[0] : null)} />
+                        </div>
                     </CardContent>
                     <div className="p-6 pt-0">
                         <Button className="w-full" onClick={handleAddCreator}>
@@ -314,6 +324,10 @@ export default function AdminPage() {
                          <div className="space-y-2">
                             <Label htmlFor="video-url">YouTube Video URL</Label>
                             <Input id="video-url" placeholder="https://www.youtube.com/watch?v=..." value={newVideoUrl} onChange={e => setNewVideoUrl(e.target.value)} />
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="video-thumbnail">Video Thumbnail</Label>
+                            <Input id="video-thumbnail" type="file" onChange={e => setNewVideoThumbnail(e.target.files ? e.target.files[0] : null)} />
                         </div>
                     </CardContent>
                      <div className="p-6 pt-0">

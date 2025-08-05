@@ -3,12 +3,11 @@
 
 import { AstrydeLogo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUser } from '@/context/UserContext';
 import { useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
+import { BrainCircuit, Code, Dna, Bot, Atom, Rocket } from 'lucide-react';
 
-// Simple SVG for Google icon
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
         <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
@@ -17,6 +16,42 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
         <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.012,36.49,44,30.861,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
     </svg>
 );
+
+const tech = [
+  { name: 'AI/ML', icon: <Bot /> },
+  { name: 'Web Dev', icon: <Code /> },
+  { name: 'BioTech', icon: <Dna /> },
+  { name: 'Quantum', icon: <Atom /> },
+  { name: 'Neuroscience', icon: <BrainCircuit /> },
+  { name: 'Propulsion', icon: <Rocket /> },
+];
+
+const TechCarousel = () => {
+  const duplicatedTech = [...tech, ...tech];
+
+  return (
+    <div className="relative w-full h-full overflow-hidden [mask-image:_linear-gradient(to_right,transparent_0,_black_128px,_black_calc(100%-128px),transparent_100%)]">
+      <div className="flex w-max animate-scroll">
+        {duplicatedTech.map((item, index) => (
+          <div key={index} className="flex flex-col items-center justify-center h-48 w-48 m-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/20 shadow-lg hover:border-primary/50 transition-all duration-300">
+            <div className="text-primary">{React.cloneElement(item.icon, { className: 'h-12 w-12' })}</div>
+            <p className="mt-4 text-lg font-semibold text-foreground">{item.name}</p>
+          </div>
+        ))}
+      </div>
+      <style jsx>{`
+        @keyframes scroll {
+          to {
+            transform: translateX(-50%);
+          }
+        }
+        .animate-scroll {
+          animation: scroll 40s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+};
 
 
 export default function LoginPage() {
@@ -38,22 +73,35 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="absolute top-4 left-4">
-        <AstrydeLogo />
-      </div>
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-headline">Welcome to Astryde</CardTitle>
-          <CardDescription>Your cosmic journey to mastering tech skills starts here.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" className="w-full" onClick={signInWithGoogle}>
-            <GoogleIcon className="mr-2 h-5 w-5" />
-            Sign in with Google
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="relative min-h-screen w-full bg-background bg-gradient-to-br from-background via-secondary/50 to-background">
+       <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern opacity-30"></div>
+       <div className="relative min-h-screen w-full flex items-center justify-center p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 items-center gap-16 max-w-6xl w-full">
+            <div className="flex flex-col items-start text-left">
+                <AstrydeLogo />
+                <h1 className="text-4xl md:text-5xl font-bold font-headline mt-6">
+                    Your Cosmic Journey to
+                    <span className="text-primary"> Mastering Tech.</span>
+                </h1>
+                <p className="text-lg text-muted-foreground mt-4">
+                    Explore the universe of knowledge. Astryde is your launchpad to learning the most in-demand technologies from the best creators in the galaxy.
+                </p>
+                <Button size="lg" className="mt-8" onClick={signInWithGoogle}>
+                    <GoogleIcon className="mr-2 h-5 w-5" />
+                    Join the Mission - Sign In
+                </Button>
+            </div>
+            <div className="hidden lg:flex items-center justify-center">
+                <TechCarousel />
+            </div>
+        </div>
+       </div>
+       <style jsx>{`
+            .bg-grid-pattern {
+                background-image: linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+                background-size: 40px 40px;
+            }
+       `}</style>
     </div>
   );
 }

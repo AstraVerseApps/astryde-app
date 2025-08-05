@@ -45,18 +45,16 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setTechnologies([]);
         setUserStatuses({});
       }
-      // Delay setting loading to false until data fetching is complete
     });
     return () => authUnsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) {
-        setLoading(false); // If no user, not loading
+        setLoading(false); 
         return;
     }
 
-    // Listener for user-specific video statuses
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
       const newStatuses: Record<string, Video['status']> = {};
@@ -80,13 +78,13 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     const technologiesRef = collection(db, 'technologies');
     
-    // This is the master listener for all content.
-    const techUnsubscribe = onSnapshot(technologiesRef, (techSnapshot) => {
+    const techUnsubscribe = onSnapshot(technologiesRef, async (techSnapshot) => {
         const techPromises = techSnapshot.docs.map(async (techDoc) => {
             const techData = techDoc.data() as Omit<Technology, 'id' | 'creators'>;
-            const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
             
+            const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
             const creatorsSnapshot = await getDocs(creatorsRef);
+            
             const creatorPromises = creatorsSnapshot.docs.map(async (creatorDoc) => {
                 const creatorData = creatorDoc.data() as Omit<Creator, 'id'|'videos'>;
                 const videosRef = collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`);
@@ -108,17 +106,15 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             return { id: techDoc.id, ...techData, creators };
         });
 
-        Promise.all(techPromises).then(newTechnologies => {
-            setTechnologies(newTechnologies);
-            setLoading(false);
-        });
+        const newTechnologies = await Promise.all(techPromises);
+        setTechnologies(newTechnologies);
+        setLoading(false);
     });
 
     return () => techUnsubscribe();
   }, [user]);
   
   const processedTechnologies = useMemo(() => {
-    if (loading) return [];
     return technologies.map(tech => ({
       ...tech,
       creators: tech.creators.map((creator: Creator) => ({
@@ -129,7 +125,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         })),
       })),
     }));
-  }, [technologies, userStatuses, loading]);
+  }, [technologies, userStatuses]);
 
 
   const signInWithGoogle = async () => {

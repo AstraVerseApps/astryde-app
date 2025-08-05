@@ -41,106 +41,79 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-const uploadFile = async (file: File, path: string): Promise<string> => {
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
-};
-
-
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
+  const router = useRouter();
+
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setLoading(true);
       setUser(currentUser);
-      
       if (currentUser) {
         setIsAdmin(currentUser.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL);
-
-        const userStatusesRef = collection(db, `users/${currentUser.uid}/videoStatuses`);
-        const statusesUnsub = onSnapshot(userStatusesRef, (snapshot) => {
-          const newStatuses: Record<string, Video['status']> = {};
-          snapshot.forEach(doc => {
-            newStatuses[doc.id] = doc.data().status;
-          });
-          setUserStatuses(newStatuses);
-        });
-
-        const techUnsub = onSnapshot(collection(db, 'technologies'), async (techSnapshot) => {
-          const techPromises = techSnapshot.docs.map(async (techDoc) => {
-            const techData = techDoc.data();
-            const creatorsUnsub = onSnapshot(collection(db, `technologies/${techDoc.id}/creators`), async (creatorSnapshot) => {
-              const creatorPromises = creatorSnapshot.docs.map(async (creatorDoc) => {
-                const creatorData = creatorDoc.data();
-                const videosUnsub = onSnapshot(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), (videoSnapshot) => {
-                  const videosData = videoSnapshot.docs.map(videoDoc => ({
-                    id: videoDoc.id,
-                    ...videoDoc.data()
-                  } as Video));
-                  
-                  setTechnologies(currentTechs => {
-                    return currentTechs.map(t => {
-                      if (t.id === techDoc.id) {
-                        return {
-                          ...t,
-                          creators: t.creators.map(c => {
-                            if (c.id === creatorDoc.id) {
-                              return { ...c, videos: videosData };
-                            }
-                            return c;
-                          })
-                        };
-                      }
-                      return t;
-                    });
-                  });
-                });
-                // Note: Storing unsub functions would be complex here. For this app's lifecycle,
-                // we rely on the parent listeners to manage cascading updates.
-                
-                return { id: creatorDoc.id, ...creatorData, videos: [] } as Creator;
-              });
-
-              const creatorsData = await Promise.all(creatorPromises);
-              setTechnologies(currentTechs => {
-                 const existingTech = currentTechs.find(t => t.id === techDoc.id);
-                 if (existingTech) {
-                   return currentTechs.map(t => t.id === techDoc.id ? { ...t, creators: creatorsData } : t);
-                 }
-                 return [...currentTechs, { id: techDoc.id, ...techData, icon: getIconComponent(techData.iconName), creators: creatorsData } as Technology];
-              });
-            });
-
-            return { id: techDoc.id, ...techData, icon: getIconComponent(techData.iconName), creators: [] } as Technology;
-          });
-          
-          const initialTechs = await Promise.all(techPromises);
-          setTechnologies(initialTechs);
-          setLoading(false);
-        });
-
-        return () => {
-          authUnsubscribe();
-          statusesUnsub();
-          techUnsub();
-        };
       } else {
-        setUser(null);
         setIsAdmin(false);
         setTechnologies([]);
         setUserStatuses({});
-        setLoading(false);
       }
+      setLoading(false);
     });
-
     return () => authUnsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+        setTechnologies([]);
+        setLoading(false);
+        return;
+    }
+
+    setLoading(true);
+
+    const statusesUnsub = onSnapshot(collection(db, `users/${user.uid}/videoStatuses`), (snapshot) => {
+        const newStatuses: Record<string, Video['status']> = {};
+        snapshot.docs.forEach(doc => {
+            newStatuses[doc.id] = doc.data().status;
+        });
+        setUserStatuses(newStatuses);
+    });
+
+    const techUnsub = onSnapshot(collection(db, 'technologies'), async (techSnapshot) => {
+        const newTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+            const techData = techDoc.data();
+            const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+
+            const creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
+                const creatorData = creatorDoc.data();
+                const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                const videos = videosSnapshot.docs.map(videoDoc => ({
+                    id: videoDoc.id,
+                    ...videoDoc.data()
+                } as Video));
+
+                return { id: creatorDoc.id, ...creatorData, videos } as Creator;
+            }));
+
+            return {
+                id: techDoc.id,
+                ...techData,
+                icon: getIconComponent(techData.iconName),
+                creators,
+            } as Technology;
+        }));
+        setTechnologies(newTechnologies);
+        setLoading(false);
+    });
+
+    return () => {
+        statusesUnsub();
+        techUnsub();
+    };
+}, [user]);
 
 
 
@@ -203,7 +176,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         title: video.title,
         duration: video.duration,
         url: video.url,
-        thumbnail: 'https://placehold.co/1280x720',
     });
   };
 
@@ -271,5 +243,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

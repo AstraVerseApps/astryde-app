@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/UserContext';
 import { useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
-import { BrainCircuit, Code, Dna, Bot, Atom, Rocket } from 'lucide-react';
+import { BrainCircuit, Code, Dna, Bot, Atom, Rocket, Database, Binary, Network, Workflow, Sparkles } from 'lucide-react';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -18,16 +18,20 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const tech = [
-  { name: 'AI/ML', icon: <Bot /> },
-  { name: 'Web Dev', icon: <Code /> },
-  { name: 'BioTech', icon: <Dna /> },
-  { name: 'Quantum', icon: <Atom /> },
-  { name: 'Neuroscience', icon: <BrainCircuit /> },
-  { name: 'Propulsion', icon: <Rocket /> },
+    { name: 'Python', icon: <Code /> },
+    { name: 'SQL', icon: <Database /> },
+    { name: 'Web Dev', icon: <Code /> },
+    { name: 'DSA', icon: <Binary /> },
+    { name: 'System Design', icon: <Network /> },
+    { name: 'Java', icon: <Code /> },
+    { name: 'AI/ML', icon: <Bot /> },
+    { name: 'Kafka', icon: <Workflow /> },
+    { name: 'Spark', icon: <Sparkles /> },
+    { name: 'Databases', icon: <Database /> },
 ];
 
 const TechCarousel = () => {
-  const duplicatedTech = [...tech, ...tech];
+  const duplicatedTech = [...tech, ...tech, ...tech];
 
   return (
     <div className="relative w-full h-full overflow-hidden [mask-image:_linear-gradient(to_right,transparent_0,_black_128px,_black_calc(100%-128px),transparent_100%)]">
@@ -42,11 +46,11 @@ const TechCarousel = () => {
       <style jsx>{`
         @keyframes scroll {
           to {
-            transform: translateX(-50%);
+            transform: translateX(-${100 / 3}%);
           }
         }
         .animate-scroll {
-          animation: scroll 40s linear infinite;
+          animation: scroll 60s linear infinite;
         }
       `}</style>
     </div>

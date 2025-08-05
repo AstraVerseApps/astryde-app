@@ -30,6 +30,14 @@ const getYouTubeEmbedUrl = (url: string) => {
     }
 };
 
+const cardColors = [
+  '--chart-1',
+  '--chart-2',
+  '--chart-3',
+  '--chart-4',
+  '--chart-5',
+];
+
 export default function DashboardPage() {
   const { updateVideoStatus, technologies } = useUser();
   
@@ -39,7 +47,9 @@ export default function DashboardPage() {
 
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
-    updateVideoStatus(videoId, status);
+    if (selectedCreator) {
+      updateVideoStatus(videoId, status);
+    }
   };
 
   const handleTechClick = (tech: Technology) => {
@@ -102,18 +112,24 @@ export default function DashboardPage() {
 
       {view === 'technologies' && (
          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {technologies.length > 0 ? technologies.map(tech => (
+            {technologies.length > 0 ? technologies.map((tech, index) => {
+              const colorVar = cardColors[index % cardColors.length];
+              return (
                 <Card 
                     key={tech.id} 
                     onClick={() => handleTechClick(tech)}
-                    className="cursor-pointer transition-all hover:shadow-primary/20 hover:shadow-lg hover:-translate-y-1"
+                    className="cursor-pointer transition-all hover:-translate-y-1 border-b-4"
+                    style={{ 
+                      borderColor: `hsl(${colorVar})`,
+                      boxShadow: `0 0 20px hsl(${colorVar} / 0.1)`
+                    }}
                 >
                     <CardHeader>
                         <CardTitle>{tech.name}</CardTitle>
                         <CardDescription>{tech.description}</CardDescription>
                     </CardHeader>
                 </Card>
-            )) : (
+            )}) : (
                 <div className="col-span-full text-center text-muted-foreground py-12">
                     <p>Your learning galaxy is waiting to be explored.</p>
                     <p>No technologies have been added yet.</p>

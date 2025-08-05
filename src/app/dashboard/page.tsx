@@ -85,9 +85,6 @@ export default function DashboardPage() {
              <Dialog key={video.id}>
                 <Card className="flex flex-col md:flex-row items-center justify-between p-4 group">
                   <div className="flex items-center gap-4 w-full">
-                    <div className="w-40 h-24 bg-muted rounded-md overflow-hidden shrink-0">
-                      <Image data-ai-hint="code technology" src={video.thumbnail} alt={video.title} width={160} height={90} className="object-cover w-full h-full" />
-                    </div>
                     <div className="flex-grow">
                       <p className="font-semibold text-lg">{video.title}</p>
                       <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
@@ -232,3 +229,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    

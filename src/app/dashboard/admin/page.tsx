@@ -29,7 +29,6 @@ export default function AdminPage() {
   const [newVideoTitle, setNewVideoTitle] = React.useState('');
   const [newVideoDuration, setNewVideoDuration] = React.useState('');
   const [newVideoUrl, setNewVideoUrl] = React.useState('');
-  const [newVideoThumbnail, setNewVideoThumbnail] = React.useState<File | null>(null);
   const [selectedTechForNewVideo, setSelectedTechForNewVideo] = React.useState('');
   const [selectedCreatorForNewVideo, setSelectedCreatorForNewVideo] = React.useState('');
 
@@ -100,11 +99,11 @@ export default function AdminPage() {
 
 
   const handleAddVideo = async () => {
-    if (!selectedTechForNewVideo || !selectedCreatorForNewVideo || !newVideoTitle || !newVideoUrl || !newVideoDuration || !newVideoThumbnail) {
+    if (!selectedTechForNewVideo || !selectedCreatorForNewVideo || !newVideoTitle || !newVideoUrl || !newVideoDuration) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Please fill in all required fields and upload a thumbnail for the new video.',
+        description: 'Please fill in all required fields for the new video.',
       });
       return;
     }
@@ -112,14 +111,12 @@ export default function AdminPage() {
       await addVideo(selectedTechForNewVideo, selectedCreatorForNewVideo, {
         title: newVideoTitle,
         duration: newVideoDuration,
-        thumbnail: newVideoThumbnail,
         url: newVideoUrl,
       });
       toast({ title: 'Video Created', description: 'The new video has been added successfully.' });
       setNewVideoTitle('');
       setNewVideoDuration('');
       setNewVideoUrl('');
-      setNewVideoThumbnail(null);
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
@@ -315,10 +312,6 @@ export default function AdminPage() {
                          <div className="space-y-2">
                             <Label htmlFor="video-url">YouTube Video URL</Label>
                             <Input id="video-url" placeholder="https://www.youtube.com/watch?v=..." value={newVideoUrl} onChange={e => setNewVideoUrl(e.target.value)} />
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="video-thumbnail">Video Thumbnail</Label>
-                            <Input id="video-thumbnail" type="file" onChange={e => setNewVideoThumbnail(e.target.files ? e.target.files[0] : null)} />
                         </div>
                     </CardContent>
                      <div className="p-6 pt-0">

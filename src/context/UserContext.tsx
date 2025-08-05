@@ -32,8 +32,8 @@ interface UserContextType {
   logout: () => void;
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators' | 'icon'> & { iconName: string }) => Promise<void>;
-  addCreator: (techId: string, creator: { name: string; avatar: File | string; }) => Promise<void>;
-  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { thumbnail: File | string; }) => Promise<void>;
+  addCreator: (techId: string, creator: { name: string; avatar: string; }) => Promise<void>;
+  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status' | 'thumbnail'>) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
@@ -189,31 +189,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, 'technologies'), { name, description, iconName });
   };
 
-  const addCreator = async (techId: string, creator: { name: string; avatar: File | string; }) => {
+  const addCreator = async (techId: string, creator: { name: string; avatar: string; }) => {
     if (!techId) throw new Error("Technology ID is required to add a creator.");
     
-    let avatarUrl = typeof creator.avatar === 'string' ? creator.avatar : 'https://placehold.co/100x100';
-    if (creator.avatar instanceof File) {
-        avatarUrl = await uploadFile(creator.avatar, `avatars/${creator.avatar.name}_${Date.now()}`);
-    }
-
     await addDoc(collection(db, `technologies/${techId}/creators`), {
         name: creator.name,
-        avatar: avatarUrl
+        avatar: creator.avatar
     });
   };
 
-  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { thumbnail: File | string }) => {
-    let thumbnailUrl = typeof video.thumbnail === 'string' ? video.thumbnail : 'https://placehold.co/1280x720';
-    if (video.thumbnail instanceof File) {
-        thumbnailUrl = await uploadFile(video.thumbnail, `thumbnails/${video.thumbnail.name}_${Date.now()}`);
-    }
-
+  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status' | 'thumbnail'>) => {
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), { 
         title: video.title,
         duration: video.duration,
         url: video.url,
-        thumbnail: thumbnailUrl,
+        thumbnail: 'https://placehold.co/1280x720',
     });
   };
 

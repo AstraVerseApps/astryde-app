@@ -18,7 +18,7 @@ interface UserContextType {
   updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators'>) => Promise<void>;
   addCreator: (techId: string, creator: { name: string; }) => Promise<void>;
-  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => Promise<void>;
+  addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp }) => Promise<void>;
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
@@ -42,7 +42,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setIsAdmin(false);
       }
-      // Loading state will be managed by data fetching useEffects
+      setLoading(false);
     });
     return () => authUnsubscribe();
   }, []);
@@ -51,11 +51,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (!user) {
       setTechnologies([]);
       setUserStatuses({});
-      setLoading(false);
       return;
     }
-
-    setLoading(true);
 
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
@@ -66,106 +63,33 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       setUserStatuses(newStatuses);
     });
 
-    const technologiesRef = collection(db, 'technologies');
-    const techUnsubscribe = onSnapshot(technologiesRef, (techSnapshot) => {
-      if (techSnapshot.empty) {
-        setTechnologies([]);
-        setLoading(false);
-        return;
-      }
-      
-      const technologiesData: { [id: string]: Omit<Technology, 'creators'> } = {};
-      techSnapshot.docs.forEach(doc => {
-        technologiesData[doc.id] = { id: doc.id, ...(doc.data() as Omit<Technology, 'id' | 'creators'>) };
-      });
-
-      const allCreatorUnsubs: Unsubscribe[] = [];
-
-      techSnapshot.docs.forEach(techDoc => {
-        const creatorsRef = collection(db, `technologies/${techDoc.id}/creators`);
-        const creatorUnsub = onSnapshot(creatorsRef, (creatorSnapshot) => {
+    const technologiesQuery = query(collection(db, 'technologies'));
+    const techUnsubscribe = onSnapshot(technologiesQuery, async (techSnapshot) => {
+      setLoading(true);
+      const newTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+        const techData = { id: techDoc.id, ...techDoc.data() } as Omit<Technology, 'creators'>;
+        
+        const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
+        const creatorsSnapshot = await getDocs(creatorsQuery);
+        const creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
+          const creatorData = { id: creatorDoc.id, ...creatorDoc.data() } as Omit<Creator, 'videos'>;
           
-          const creatorsData: { [id: string]: Omit<Creator, 'videos'> } = {};
-           if (creatorSnapshot.empty) {
-            setTechnologies(currentTechs => currentTechs.map(t => t.id === techDoc.id ? { ...technologiesData[techDoc.id], creators: [] } : t));
-          }
-          creatorSnapshot.docs.forEach(creatorDoc => {
-            creatorsData[creatorDoc.id] = { id: creatorDoc.id, ...(creatorDoc.data() as Omit<Creator, 'id' | 'videos'>) };
-          });
-
-          const allVideoUnsubs: Unsubscribe[] = [];
+          const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
+          const videosSnapshot = await getDocs(videosQuery);
+          const videos = videosSnapshot.docs.map(videoDoc => ({
+            id: videoDoc.id,
+            ...videoDoc.data()
+          } as Video));
           
-          creatorSnapshot.docs.forEach(creatorDoc => {
-            const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
-            const videoUnsub = onSnapshot(videosQuery, (videoSnapshot) => {
-              
-              const videosData: Video[] = [];
-               videoSnapshot.docs.forEach(videoDoc => {
-                videosData.push({ 
-                  id: videoDoc.id, 
-                  ...(videoDoc.data() as Omit<Video, 'id'>),
-                   status: userStatuses[videoDoc.id] || 'Not Started'
-                });
-              });
-              
-              setTechnologies(currentTechs => {
-                const updatedTechs = currentTechs.map(t => ({...t})); // Deep copy
-                const techIndex = updatedTechs.findIndex(t => t.id === techDoc.id);
+          return { ...creatorData, videos };
+        }));
 
-                if (techIndex !== -1) {
-                  const creatorIndex = updatedTechs[techIndex].creators.findIndex(c => c.id === creatorDoc.id);
-                  if (creatorIndex !== -1) {
-                    updatedTechs[techIndex].creators[creatorIndex] = {
-                      ...updatedTechs[techIndex].creators[creatorIndex],
-                      videos: videosData,
-                    };
-                  } else {
-                     updatedTechs[techIndex].creators.push({
-                      ...creatorsData[creatorDoc.id],
-                      videos: videosData,
-                    });
-                  }
-                } else {
-                  updatedTechs.push({
-                    ...technologiesData[techDoc.id],
-                    creators: [{ ...creatorsData[creatorDoc.id], videos: videosData }]
-                  });
-                }
-                return updatedTechs;
-              });
-
-            });
-            allVideoUnsubs.push(videoUnsub);
-          });
-          
-          setTechnologies(currentTechs => {
-            const updatedTechs = [...currentTechs];
-            const techIndex = updatedTechs.findIndex(t => t.id === techDoc.id);
-            const newCreators = Object.values(creatorsData).map(c => {
-                const existingCreator = updatedTechs[techIndex]?.creators.find(ec => ec.id === c.id);
-                return existingCreator ? { ...c, videos: existingCreator.videos } : { ...c, videos: [] };
-            });
-
-            if (techIndex !== -1) {
-                 updatedTechs[techIndex] = {
-                    ...updatedTechs[techIndex],
-                    creators: newCreators
-                };
-            } else {
-                 updatedTechs.push({
-                    ...technologiesData[techDoc.id],
-                    creators: newCreators,
-                });
-            }
-            return updatedTechs;
-          });
-
-        });
-        allCreatorUnsubs.push(creatorUnsub);
-      });
-
-      setLoading(false); // Set loading to false once initial data structure is set up
+        return { ...techData, creators };
+      }));
+      setTechnologies(newTechnologies);
+      setLoading(false);
     });
+
 
     return () => {
       statusesUnsubscribe();
@@ -227,13 +151,15 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'>) => {
-    await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), { 
-        title: video.title,
-        duration: video.duration,
-        url: video.url,
-        createdAt: serverTimestamp(),
-    });
+  const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp }) => {
+    const { title, duration, url, createdAt } = video;
+    const videoData: any = {
+        title,
+        duration,
+        url,
+        createdAt: createdAt || serverTimestamp(),
+    };
+    await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), videoData);
   };
 
   const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {
@@ -300,3 +226,5 @@ export const useUser = () => {
   }
   return context;
 };
+
+    

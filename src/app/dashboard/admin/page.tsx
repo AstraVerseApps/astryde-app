@@ -88,7 +88,6 @@ export default function AdminPage() {
       toast({ title: 'Creator Created', description: 'The new creator has been added successfully.' });
       setNewCreatorName('');
       setSelectedTechForNewCreator('');
-      router.refresh(); // Force refresh to get new creator
     } catch (error) {
       console.error('Failed to add creator:', error);
       toast({
@@ -124,7 +123,6 @@ export default function AdminPage() {
       setSelectedTechForNewVideo('');
       setSelectedCreatorForNewVideo('');
       setCreatorsForTech([]);
-      router.refresh(); // Force refresh to get new video
     } catch (error) {
        console.error('Failed to add video:', error);
        toast({

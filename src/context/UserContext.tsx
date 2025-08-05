@@ -109,13 +109,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!user) {
       setTechnologies([]);
+      setUserStatuses({});
       setLoading(false);
       return;
     }
 
     const unsubscribe = onSnapshot(collection(db, 'technologies'), (snapshot) => {
-        // Any change in technologies collection will trigger a full refetch.
-        // This is simpler and more robust for this data structure.
         fetchAllData(user.uid);
     });
 
@@ -158,6 +157,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
         await setDoc(userStatusesRef, { status }, { merge: true });
+        // Also update local state for immediate UI feedback
+        setUserStatuses(prev => ({...prev, [videoId]: status}));
     } catch (e) {
         console.error("Failed to update status: ", e);
     }
@@ -245,9 +246,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 export const useUser = () => {
   const context = useContext(UserContext);
   if (context === undefined) {
-    throw new new Error('useUser must be used within a UserProvider');
+    throw new Error('useUser must be used within a UserProvider');
   }
   return context;
 };
-
-    

@@ -1,14 +1,12 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, DocumentData, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '@/lib/firebase';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
-import { useRouter }from 'next/navigation';
 
 interface UserContextType {
   user: User | null;
@@ -34,14 +32,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [loading, setLoading] = useState(true);
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
-  const router = useRouter();
-
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setLoading(true);
       setUser(currentUser);
-      if (currentUser) {
+       if (currentUser) {
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
       } else {
@@ -75,14 +71,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         const techPromises = techSnapshot.docs.map(async (techDoc) => {
             const techData = techDoc.data();
             const creatorsSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators`));
+            
             const creators = await Promise.all(
                 creatorsSnapshot.docs.map(async (creatorDoc) => {
                     const creatorData = creatorDoc.data();
                     const videosSnapshot = await getDocs(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`));
+                    
                     const videos = videosSnapshot.docs.map(videoDoc => ({
                         id: videoDoc.id,
                         ...videoDoc.data()
                     } as Video));
+
                     return { id: creatorDoc.id, ...creatorData, videos } as Creator;
                 })
             );
@@ -194,7 +193,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
 
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();
@@ -232,5 +231,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

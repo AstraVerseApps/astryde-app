@@ -4,7 +4,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import Image from 'next/image';
 import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import type { Video, Technology, Creator } from '@/types';
@@ -12,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/UserContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 const statusIcons: Record<Video['status'], React.ReactNode> = {
   'Not Started': <Circle className="h-4 w-4 text-muted-foreground" />,
@@ -33,190 +33,161 @@ const getYouTubeEmbedUrl = (url: string) => {
 
 export default function DashboardPage() {
   const { updateVideoStatus, technologies } = useUser();
-  const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
-  const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
+  const [selectedTechId, setSelectedTechId] = useState<string | null>(null);
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedTech) {
-        const updatedTech = technologies.find(t => t.id === selectedTech.id);
-        if (updatedTech) {
-            setSelectedTech(updatedTech);
-            if (selectedCreator) {
-                const updatedCreator = updatedTech.creators.find(c => c.id === selectedCreator.id);
-                setSelectedCreator(updatedCreator || null);
-            }
-        } else {
-            setSelectedTech(null);
-            setSelectedCreator(null);
-        }
+    if (technologies.length > 0 && !selectedTechId) {
+      setSelectedTechId(technologies[0].id);
     }
-  }, [technologies, selectedTech, selectedCreator]);
+  }, [technologies, selectedTechId]);
+  
+  const selectedTech = technologies.find(t => t.id === selectedTechId);
+  const creators = selectedTech?.creators || [];
+  
+  useEffect(() => {
+    if (creators.length > 0 && !selectedCreatorId) {
+        setSelectedCreatorId(creators[0].id);
+    } else if (creators.length > 0 && selectedCreatorId) {
+        const creatorExists = creators.some(c => c.id === selectedCreatorId);
+        if (!creatorExists) {
+            setSelectedCreatorId(creators[0].id);
+        }
+    } else if (creators.length === 0) {
+        setSelectedCreatorId(null);
+    }
+  }, [creators, selectedCreatorId]);
 
+  const selectedCreator = creators.find(c => c.id === selectedCreatorId);
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
-    if (!selectedTech || !selectedCreator) return;
     updateVideoStatus(videoId, status);
   };
 
-  const renderVideoList = () => {
-    if (!selectedTech || !selectedCreator) return null;
-
-    return (
-      <div>
-        <Button variant="ghost" onClick={() => setSelectedCreator(null)} className="mb-4">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Creators
-        </Button>
-        <div className="flex items-center gap-4 mb-6">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={selectedCreator.avatar} />
-              <AvatarFallback>{selectedCreator.name.charAt(0)}</AvatarFallback>
-            </Avatar>
-            <div>
-                <h2 className="text-2xl font-bold font-headline">{selectedCreator.name}</h2>
-                <p className="text-muted-foreground">Videos on {selectedTech.name}</p>
-            </div>
-        </div>
-        <div className="space-y-4">
-          {selectedCreator.videos.map((video) => (
-             <Dialog key={video.id}>
-                <Card className="flex flex-col md:flex-row items-center justify-between p-4 group">
-                  <div className="flex items-center gap-4 w-full">
-                    <div className="flex-grow">
-                      <p className="font-semibold text-lg">{video.title}</p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-4 md:mt-0 w-full md:w-auto justify-end">
-                     <div className="hidden md:block px-2">
-                        {statusIcons[video.status]}
-                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">Set Status</Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <DialogTrigger asChild>
-                        <Button size="sm">
-                            <PlayCircle className="mr-2 h-4 w-4" />
-                            Watch Now
-                        </Button>
-                    </DialogTrigger>
-                  </div>
-                </Card>
-                <DialogContent className="max-w-4xl h-auto">
-                    <DialogHeader>
-                        <DialogTitle>{video.title}</DialogTitle>
-                    </DialogHeader>
-                    <div className="aspect-video">
-                        <iframe
-                            className="w-full h-full rounded-lg"
-                            src={getYouTubeEmbedUrl(video.url)}
-                            title={video.title}
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                        ></iframe>
-                    </div>
-                </DialogContent>
-            </Dialog>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderCreatorGrid = () => {
-    if (!selectedTech) return null;
-    
-    return (
-      <div>
-        <Button variant="ghost" onClick={() => {
-          setSelectedTech(null);
-          setSelectedCreator(null);
-        }} className="mb-4">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Technologies
-        </Button>
-        <div className="flex items-center gap-4 mb-6">
-            <h2 className="text-3xl font-bold font-headline">{selectedTech.name}</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {selectedTech.creators.map(creator => (
-            <Card key={creator.id} className="cursor-pointer hover:shadow-lg hover:border-primary transition-all" onClick={() => setSelectedCreator(creator)}>
-              <CardHeader className="items-center text-center">
-                  <Avatar className="h-24 w-24 mb-4">
-                    <AvatarImage src={creator.avatar} />
-                    <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                <CardTitle>{creator.name}</CardTitle>
-                <CardDescription>{creator.videos.length} videos</CardDescription>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderTechnologyGrid = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-      {technologies.map(tech => {
-        return (
-            <Card key={tech.id} className="cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-transform duration-300" onClick={() => setSelectedTech(tech)}>
-              <CardHeader>
-                <div className="flex items-center gap-4 mb-2">
-                    <CardTitle className="text-2xl font-headline">{tech.name}</CardTitle>
-                </div>
-                <CardDescription>{tech.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                 <div className="flex -space-x-4 rtl:space-x-reverse">
-                    {tech.creators.slice(0, 3).map(creator => (
-                        <Avatar key={creator.id} className="border-2 border-background">
-                            <AvatarImage src={creator.avatar} />
-                            <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                    ))}
-                    {tech.creators.length > 3 && (
-                         <a className="flex items-center justify-center w-10 h-10 text-xs font-medium text-white bg-gray-700 border-2 border-white rounded-full hover:bg-gray-600 dark:border-gray-800" href="#">+{tech.creators.length - 3}</a>
-                    )}
-                 </div>
-                 <p className="text-sm text-muted-foreground mt-2">{tech.creators.length} creators</p>
-              </CardContent>
-            </Card>
-        )
-      })}
-    </div>
-  );
-  
-  const renderLearningPath = () => {
-    if (selectedTech && selectedCreator) {
-        return renderVideoList();
+  const handleTechChange = (techId: string) => {
+    setSelectedTechId(techId);
+    const newTech = technologies.find(t => t.id === techId);
+    if (newTech && newTech.creators.length > 0) {
+        setSelectedCreatorId(newTech.creators[0].id);
+    } else {
+        setSelectedCreatorId(null);
     }
-    if (selectedTech) {
-        return renderCreatorGrid();
-    }
-    return renderTechnologyGrid();
   }
-
 
   return (
     <>
       <div className="flex items-center">
-        <h1 className="text-lg font-semibold md:text-2xl font-headline">Cosmic Dashboard</h1>
+        <h1 className="text-lg font-semibold md:text-2xl font-headline">Your Learning Galaxy</h1>
       </div>
        <Card>
         <CardHeader>
-          <CardTitle>Your Learning Galaxy</CardTitle>
-          <CardDescription>Explore technologies, creators, and videos to expand your universe of knowledge.</CardDescription>
+          <CardTitle>Explore Technologies</CardTitle>
+          <CardDescription>Select a technology to begin your journey through its universe of creators and content.</CardDescription>
         </CardHeader>
         <CardContent>
-            {renderLearningPath()}
+            {technologies.length > 0 ? (
+                <Tabs value={selectedTechId || ''} onValueChange={handleTechChange} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                        {technologies.map(tech => (
+                            <TabsTrigger key={tech.id} value={tech.id}>{tech.name}</TabsTrigger>
+                        ))}
+                    </TabsList>
+                    {technologies.map(tech => (
+                        <TabsContent key={tech.id} value={tech.id}>
+                           <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-1">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Creators in {tech.name}</CardTitle>
+                                            <CardDescription>Select a creator to see their videos.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-2">
+                                            {tech.creators.length > 0 ? tech.creators.map(creator => (
+                                                <div 
+                                                    key={creator.id}
+                                                    onClick={() => setSelectedCreatorId(creator.id)}
+                                                    className={cn(
+                                                        "flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors",
+                                                        selectedCreatorId === creator.id ? "bg-primary/10 text-primary" : "hover:bg-muted/50"
+                                                    )}
+                                                >
+                                                    <Avatar className="h-10 w-10 border-2 border-primary/20">
+                                                        <AvatarImage src={creator.avatar} />
+                                                        <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                    <span className="font-medium">{creator.name}</span>
+                                                </div>
+                                            )) : (
+                                                <p className="text-sm text-muted-foreground p-3">No creators available for this technology yet.</p>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                                <div className="lg:col-span-2">
+                                    {selectedCreator ? (
+                                         <div className="space-y-4">
+                                            {selectedCreator.videos.map(video => (
+                                                <Dialog key={video.id}>
+                                                    <Card className="flex flex-col md:flex-row items-center justify-between p-4 group transition-all hover:shadow-md hover:border-primary/50">
+                                                        <div className="flex items-center gap-4 w-full">
+                                                            <div className="text-muted-foreground">{statusIcons[video.status]}</div>
+                                                            <div className="flex-grow">
+                                                                <p className="font-semibold">{video.title}</p>
+                                                                <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-4 md:mt-0 w-full md:w-auto justify-end flex-shrink-0">
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="outline" size="sm">Set Status</Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent>
+                                                                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'In Progress')}>In Progress</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Completed')}>Completed</DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                            <DialogTrigger asChild>
+                                                                <Button size="sm">
+                                                                    <PlayCircle className="mr-2 h-4 w-4" />
+                                                                    Watch Now
+                                                                </Button>
+                                                            </DialogTrigger>
+                                                        </div>
+                                                    </Card>
+                                                    <DialogContent className="max-w-4xl h-auto">
+                                                        <DialogHeader>
+                                                            <DialogTitle>{video.title}</DialogTitle>
+                                                        </DialogHeader>
+                                                        <div className="aspect-video">
+                                                            <iframe
+                                                                className="w-full h-full rounded-lg"
+                                                                src={getYouTubeEmbedUrl(video.url)}
+                                                                title={video.title}
+                                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                                allowFullScreen
+                                                            ></iframe>
+                                                        </div>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <Card className="flex items-center justify-center h-full min-h-[200px]">
+                                            <p className="text-muted-foreground">Select a creator to see their videos.</p>
+                                        </Card>
+                                    )}
+                                </div>
+                           </div>
+                        </TabsContent>
+                    ))}
+                </Tabs>
+            ) : (
+                <div className="text-center text-muted-foreground py-12">
+                    <p>Your learning galaxy is waiting to be explored.</p>
+                    <p>No technologies have been added yet.</p>
+                </div>
+            )}
         </CardContent>
       </Card>
     </>

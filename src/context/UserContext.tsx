@@ -24,7 +24,7 @@ interface UserContextType {
   loading: boolean;
   signInWithGoogle: () => void;
   logout: () => void;
-  updateVideoStatus: (videoId: string, status: Video['status']) => Promise<void>;
+  updateVideoStatus: (techId: string, creatorId: string, videoId: string, status: Video['status']) => Promise<void>;
   addTechnology: (tech: Omit<Technology, 'id' | 'creators'>) => Promise<string>;
   addCreator: (techId: string, creator: { name: string; }) => Promise<string>;
   addVideo: (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp }) => Promise<void>;
@@ -175,11 +175,11 @@ useEffect(() => {
     }
   };
 
-  const updateVideoStatus = async (videoId: string, status: Video['status']) => {
+  const updateVideoStatus = async (techId: string, creatorId: string, videoId: string, status: Video['status']) => {
     if (!user) return;
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
-        await setDoc(userStatusesRef, { status }, { merge: true });
+        await setDoc(userStatusesRef, { status, techId, creatorId }, { merge: true });
     } catch (e) {
         console.error("Failed to update status: ", e);
     }
@@ -224,60 +224,64 @@ useEffect(() => {
     }
   };
 
-  const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
+  const addBulkData = useCallback(async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
     let i = 0;
+    const techIdCache: Record<string, string> = {};
+    const creatorIdCache: Record<string, string> = {};
+
     for (const item of data) {
+      try {
         if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
-            console.warn('Skipping row due to missing required fields:', item);
-            i++;
-            onProgress((i / data.length) * 100);
-            continue;
+          console.warn('Skipping row due to missing required fields:', item);
+          continue;
         }
 
-        try {
-            // Find or create technology
-            const techId = await findOrCreateDocument('technologies', 'name', item.technology, {
-                name: item.technology,
-                description: ''
-            });
-
-            // Find or create creator
-            const creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
-                name: item.creator,
-                avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`
-            });
-            
-            // Prepare video data
-            const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
-                title: item.videoTitle,
-                duration: item.duration,
-                url: item.url,
-            };
-
-            // Handling Excel date which can be a number or a string.
-            // Using a more robust check for a valid date.
-            let creationTimestamp: Timestamp | null = null;
-            if (item.creationDate) {
-                const date = new Date(item.creationDate);
-                if (!isNaN(date.getTime())) {
-                    creationTimestamp = Timestamp.fromDate(date);
-                }
-            }
-            if (creationTimestamp) {
-                videoData.createdAt = creationTimestamp;
-            }
-
-            // Add video
-            await addVideo(techId, creatorId, videoData);
-
-        } catch (error) {
-            console.error("Error processing row:", item, "Error:", error);
+        // Find or create technology
+        let techId = techIdCache[item.technology];
+        if (!techId) {
+          techId = await findOrCreateDocument('technologies', 'name', item.technology, {
+            name: item.technology,
+            description: '',
+          });
+          techIdCache[item.technology] = techId;
         }
-        
+
+        // Find or create creator
+        const creatorCacheKey = `${techId}_${item.creator}`;
+        let creatorId = creatorIdCache[creatorCacheKey];
+        if (!creatorId) {
+          creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
+            name: item.creator,
+            avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`,
+          });
+          creatorIdCache[creatorCacheKey] = creatorId;
+        }
+
+        // Prepare video data
+        const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
+          title: item.videoTitle,
+          duration: item.duration,
+          url: item.url,
+        };
+
+        if (item.creationDate) {
+          const date = new Date(item.creationDate);
+          if (!isNaN(date.getTime())) {
+            videoData.createdAt = Timestamp.fromDate(date);
+          }
+        }
+
+        // Add video
+        await addVideo(techId, creatorId, videoData);
+
+      } catch (error) {
+        console.error("Error processing row:", item, "Error:", error);
+      } finally {
         i++;
         onProgress((i / data.length) * 100);
+      }
     }
-  };
+  }, []);
 
 
   const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {

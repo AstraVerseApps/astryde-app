@@ -4,19 +4,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/UserContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-
-const statusIcons: Record<Video['status'], React.ReactNode> = {
-  'Not Started': <Circle className="h-4 w-4 text-muted-foreground" />,
-  'In Progress': <PlayCircle className="h-4 w-4 text-yellow-400" />,
-  'Completed': <CheckCircle2 className="h-4 w-4 text-green-500" />,
-};
+import { Badge } from '@/components/ui/badge';
 
 const getYouTubeEmbedUrl = (url: string) => {
     if (!url) return '';
@@ -47,8 +42,8 @@ export default function DashboardPage() {
 
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
-    if (selectedCreator) {
-      updateVideoStatus(videoId, status);
+    if (selectedTech && selectedCreator) {
+      updateVideoStatus(selectedTech.id, selectedCreator.id, videoId, status);
     }
   };
 
@@ -94,6 +89,22 @@ export default function DashboardPage() {
     }
   };
   const { title, description } = getHeader();
+  
+  const videoProgress = useMemo(() => {
+    if (view !== 'videos' || !selectedCreator) {
+        return null;
+    }
+    const completed = selectedCreator.videos.filter(v => v.status === 'Completed').length;
+    const inProgress = selectedCreator.videos.filter(v => v.status === 'In Progress').length;
+    const notStarted = selectedCreator.videos.filter(v => v.status === 'Not Started').length;
+    return { completed, inProgress, notStarted };
+  }, [view, selectedCreator]);
+
+  const statusStyles: Record<Video['status'], string> = {
+    'Completed': 'bg-green-500/10 border-green-500/50 hover:bg-green-500/20',
+    'In Progress': 'bg-yellow-500/10 border-yellow-500/50 hover:bg-yellow-500/20',
+    'Not Started': '',
+  };
 
 
   return (
@@ -162,11 +173,32 @@ export default function DashboardPage() {
 
       {view === 'videos' && selectedCreator && (
          <div className="space-y-4">
+            {videoProgress && (
+                <Card>
+                    <CardContent className="p-4 flex justify-around">
+                        <div className="text-center">
+                            <p className="text-2xl font-bold">{videoProgress.completed}</p>
+                            <p className="text-sm text-muted-foreground">Completed</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold">{videoProgress.inProgress}</p>
+                            <p className="text-sm text-muted-foreground">In Progress</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold">{videoProgress.notStarted}</p>
+                            <p className="text-sm text-muted-foreground">Not Started</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             {selectedCreator.videos.length > 0 ? selectedCreator.videos.map(video => (
                 <Dialog key={video.id}>
-                    <Card className="flex flex-col md:flex-row items-center justify-between p-4 group transition-all hover:shadow-md hover:border-primary/50">
+                    <Card className={cn(
+                        "flex flex-col md:flex-row items-center justify-between p-4 group transition-all",
+                        statusStyles[video.status]
+                    )}>
                         <div className="flex items-center gap-4 w-full">
-                            <div className="text-muted-foreground">{statusIcons[video.status]}</div>
                             <div className="flex-grow">
                                 <p className="font-semibold">{video.title}</p>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {video.duration}</p>
@@ -175,7 +207,9 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2 mt-4 md:mt-0 w-full md:w-auto justify-end flex-shrink-0">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm">Set Status</Button>
+                                    <Button variant="outline" size="sm">
+                                        {video.status}
+                                    </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
                                     <DropdownMenuItem onClick={() => handleStatusChange(video.id, 'Not Started')}>Not Started</DropdownMenuItem>

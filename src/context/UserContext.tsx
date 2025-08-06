@@ -36,93 +36,15 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-const useFirestoreData = (user: User | null) => {
-    const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
-    const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
-    const [loading, setLoading] = useState(true);
-    const [combinedTechnologies, setCombinedTechnologies] = useState<Technology[]>([]);
-
-    useEffect(() => {
-        if (!user) {
-            setRawTechnologies([]);
-            setUserStatuses({});
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-        const techQuery = query(collection(db, 'technologies'));
-        
-        const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-            const techsFromDB = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
-                const tech: Technology = { id: techDoc.id, ...techDoc.data(), creators: [] } as Technology;
-
-                const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
-                const creatorsSnapshot = await getDocs(creatorsQuery);
-                
-                tech.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
-                    const creator: Creator = { id: creatorDoc.id, ...creatorDoc.data(), videos: [] };
-                    
-                    const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
-                    const videosSnapshot = await getDocs(videosQuery);
-                    
-                    creator.videos = videosSnapshot.docs.map(videoDoc => ({
-                        id: videoDoc.id,
-                        ...videoDoc.data(),
-                        status: 'Not Started',
-                    } as Video));
-                    return creator;
-                }));
-                return tech;
-            }));
-            setRawTechnologies(techsFromDB);
-            setLoading(false);
-        });
-
-        const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
-        const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
-            const newStatuses: Record<string, Video['status']> = {};
-            snapshot.docs.forEach(doc => {
-                newStatuses[doc.id] = doc.data().status;
-            });
-            setUserStatuses(newStatuses);
-        });
-
-        return () => {
-            techUnsubscribe();
-            statusesUnsubscribe();
-        };
-
-    }, [user]);
-
-    useEffect(() => {
-        const technologiesWithStatuses = rawTechnologies.map(tech => ({
-            ...tech,
-            creators: tech.creators.map(creator => ({
-                ...creator,
-                videos: creator.videos.map(video => ({
-                    ...video,
-                    status: userStatuses[video.id] || 'Not Started',
-                })),
-            })),
-        }));
-        setCombinedTechnologies(technologiesWithStatuses);
-    }, [rawTechnologies, userStatuses]);
-    
-
-    return { technologies: combinedTechnologies, loading };
-};
-
-
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-
-  const { technologies, loading: dataLoading } = useFirestoreData(user);
+  
+  const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    setAuthLoading(true);
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -135,6 +57,110 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
     return () => authUnsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+        setTechnologies([]);
+        setDataLoading(false);
+        return;
+    }
+
+    setDataLoading(true);
+
+    let technologyUnsubscribe: Unsubscribe;
+    let creatorUnsubscribes: Unsubscribe[] = [];
+    let videoUnsubscribes: Unsubscribe[] = [];
+    let statusUnsubscribe: Unsubscribe;
+
+    const unsubAll = () => {
+        if (technologyUnsubscribe) technologyUnsubscribe();
+        creatorUnsubscribes.forEach(unsub => unsub());
+        videoUnsubscribes.forEach(unsub => unsub());
+        if (statusUnsubscribe) statusUnsubscribe();
+    };
+
+    const fetchAllData = () => {
+        unsubAll(); // Unsubscribe from previous listeners
+
+        // 1. Listen to video statuses first
+        const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
+        statusUnsubscribe = onSnapshot(statusesRef, (statusSnapshot) => {
+            const userStatuses: Record<string, Video['status']> = {};
+            statusSnapshot.docs.forEach(doc => {
+                userStatuses[doc.id] = doc.data().status;
+            });
+
+            // 2. Listen to technologies
+            const techQuery = query(collection(db, 'technologies'));
+            technologyUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
+                const techsFromDB: Technology[] = techSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), creators: [] } as Technology));
+                
+                let creatorsCompleted = 0;
+                if (techsFromDB.length === 0) {
+                    setTechnologies([]);
+                    setDataLoading(false);
+                    return;
+                }
+
+                const allCreators: Creator[][] = [];
+
+                techsFromDB.forEach((tech, techIndex) => {
+                    const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
+                    const creatorUnsub = onSnapshot(creatorsQuery, (creatorSnapshot) => {
+                        const creatorsFromDB: Creator[] = creatorSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), videos: [] } as Creator));
+                        allCreators[techIndex] = creatorsFromDB;
+
+                        let videosCompleted = 0;
+                        if (creatorsFromDB.length === 0) {
+                             creatorsCompleted++;
+                             if (creatorsCompleted === techsFromDB.length) {
+                                setTechnologies(techsFromDB.map((t, i) => ({...t, creators: allCreators[i] || []})))
+                                setDataLoading(false);
+                             }
+                             return;
+                        }
+                        
+                        const allVideos: Video[][] = [];
+                        
+                        creatorsFromDB.forEach((creator, creatorIndex) => {
+                             const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
+                             const videoUnsub = onSnapshot(videosQuery, (videoSnapshot) => {
+                                const videosFromDB: Video[] = videoSnapshot.docs.map(doc => ({
+                                    id: doc.id,
+                                    ...doc.data(),
+                                    status: userStatuses[doc.id] || 'Not Started'
+                                } as Video));
+                                
+                                allVideos[creatorIndex] = videosFromDB;
+                                videosCompleted++;
+                                
+                                if (videosCompleted === creatorsFromDB.length) {
+                                    creatorsFromDB.forEach((c, i) => c.videos = allVideos[i] || []);
+                                    creatorsCompleted++;
+                                    
+                                    if (creatorsCompleted === techsFromDB.length) {
+                                        techsFromDB.forEach((t, i) => t.creators = allCreators[i] || []);
+                                        setTechnologies(techsFromDB);
+                                        setDataLoading(false);
+                                    }
+                                }
+                             });
+                             videoUnsubscribes.push(videoUnsub);
+                        });
+                    });
+                    creatorUnsubscribes.push(creatorUnsub);
+                });
+            });
+        });
+    };
+
+    fetchAllData();
+
+    return () => {
+        unsubAll();
+    };
+
+  }, [user]);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -242,11 +268,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           url: item.url,
         };
         
-        // Handle Excel date which might be a number or a string
         if (item.creationDate) {
             let date: Date;
             if(typeof item.creationDate === 'number') {
-                // Handle Excel's numeric date format (days since 1900)
                 date = new Date(Math.round((item.creationDate - 25569) * 86400 * 1000));
             } else {
                 date = new Date(item.creationDate);
@@ -257,7 +281,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
-        // Add video
         await addVideo(techId, creatorId, videoData);
 
       } catch (error) {

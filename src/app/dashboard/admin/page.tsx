@@ -191,26 +191,46 @@ export default function AdminPage() {
     setUploadProgress(0);
     
     try {
-        const data = await excelFile.arrayBuffer();
-        const workbook = XLSX.read(data, { type: 'buffer', cellDates: true });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
-        
-        const bulkData = json.map((row: any) => ({
-            technology: row.Technology,
-            creator: row.Creator,
-            videoTitle: row.VideoTitle,
-            duration: String(row.Duration),
-            url: row.URL,
-            creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
-        }));
+        const reader = new FileReader();
+        reader.readAsArrayBuffer(excelFile);
 
-        await addBulkData(bulkData, (progress) => {
-            setUploadProgress(progress);
+        await new Promise<void>((resolve, reject) => {
+            reader.onload = async (e) => {
+                try {
+                    const data = e.target?.result;
+                    if (!data) {
+                        return reject(new Error("Failed to read file."));
+                    }
+                    const workbook = XLSX.read(data, { type: 'buffer', cellDates: true });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    const bulkData = json.map((row: any) => ({
+                        technology: row.Technology,
+                        creator: row.Creator,
+                        videoTitle: row.VideoTitle,
+                        duration: String(row.Duration),
+                        url: row.URL,
+                        creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
+                    }));
+
+                    await addBulkData(bulkData, (progress) => {
+                        setUploadProgress(progress);
+                    });
+
+                    toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                }
+            };
+
+            reader.onerror = (err) => {
+                reject(err);
+            }
         });
 
-        toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
     } catch (error) {
         console.error("Failed to process Excel file:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });

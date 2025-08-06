@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, where, getDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 
@@ -36,15 +36,117 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+const useFirestoreData = (user: User | null) => {
+    const [technologies, setTechnologies] = useState<Technology[]>([]);
+    const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!user) {
+            setTechnologies([]);
+            setUserStatuses({});
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+
+        const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
+        const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
+            const newStatuses: Record<string, Video['status']> = {};
+            snapshot.docs.forEach(doc => {
+                newStatuses[doc.id] = doc.data().status;
+            });
+            setUserStatuses(newStatuses);
+        });
+
+        const techQuery = query(collection(db, 'technologies'));
+        const techUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
+            const techsFromDB = techSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                creators: [],
+            } as Technology));
+
+            setTechnologies(techsFromDB);
+
+            const creatorUnsubscribes = techsFromDB.flatMap(tech => {
+                const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
+                return onSnapshot(creatorsQuery, (creatorSnapshot) => {
+                    const creatorsFromDB = creatorSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                        videos: [],
+                    } as Creator));
+
+                    setTechnologies(currentTechs =>
+                        currentTechs.map(t =>
+                            t.id === tech.id ? { ...t, creators: creatorsFromDB } : t
+                        )
+                    );
+
+                    const videoUnsubscribes = creatorsFromDB.flatMap(creator => {
+                        const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
+                        return onSnapshot(videosQuery, (videoSnapshot) => {
+                            const videosFromDB = videoSnapshot.docs.map(doc => ({
+                                id: doc.id,
+                                ...doc.data(),
+                            } as Video));
+
+                            setTechnologies(currentTechs =>
+                                currentTechs.map(t =>
+                                    t.id === tech.id
+                                        ? {
+                                            ...t,
+                                            creators: t.creators.map(c =>
+                                                c.id === creator.id ? { ...c, videos: videosFromDB } : c
+                                            ),
+                                        }
+                                        : t
+                                )
+                            );
+                        });
+                    });
+                    return () => videoUnsubscribes.forEach(unsub => unsub());
+                });
+            });
+             setLoading(false);
+             return () => creatorUnsubscribes.forEach(unsub => unsub());
+        });
+
+        return () => {
+            statusesUnsubscribe();
+            techUnsubscribe();
+        };
+    }, [user]);
+
+    const processedTechnologies = useMemo(() => {
+        if (loading) return [];
+        return technologies.map(tech => ({
+            ...tech,
+            creators: tech.creators.map(creator => ({
+                ...creator,
+                videos: creator.videos.map(video => ({
+                    ...video,
+                    status: userStatuses[video.id] || 'Not Started',
+                })),
+            })),
+        }));
+    }, [technologies, userStatuses, loading]);
+
+    return { technologies: processedTechnologies, loading };
+};
+
+
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [technologies, setTechnologies] = useState<Technology[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const { technologies, loading: dataLoading } = useFirestoreData(user);
 
   useEffect(() => {
-    setLoading(true);
+    setAuthLoading(true);
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -53,110 +155,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setIsAdmin(false);
       }
-      setLoading(false);
+      setAuthLoading(false);
     });
     return () => authUnsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (!user) {
-        setTechnologies([]);
-        setUserStatuses({});
-        setLoading(false);
-        return;
-    }
-
-    setLoading(true);
-    const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
-    const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
-        const newStatuses: Record<string, Video['status']> = {};
-        snapshot.docs.forEach(doc => {
-            newStatuses[doc.id] = doc.data().status;
-        });
-        setUserStatuses(newStatuses);
-    });
-
-    const techQuery = query(collection(db, 'technologies'));
-    const techUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
-        const techsFromDB = techSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data() as Omit<Technology, 'id' | 'creators'>,
-            creators: [] // Initialize creators, will be populated by sub-collection listeners
-        }));
-
-        setTechnologies(techsFromDB);
-        setLoading(false);
-    });
-
-    return () => {
-        statusesUnsubscribe();
-        techUnsubscribe();
-    };
-}, [user]);
-
-useEffect(() => {
-    if (!technologies.length) return;
-
-    const allUnsubscribes: Unsubscribe[] = [];
-
-    technologies.forEach((tech) => {
-        const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
-        const creatorsUnsubscribe = onSnapshot(creatorsQuery, (creatorSnapshot) => {
-            const creatorsFromDB = creatorSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data() as Omit<Creator, 'id' | 'videos'>,
-                videos: [] // Initialize videos
-            }));
-
-            setTechnologies(currentTechs =>
-                currentTechs.map(t => t.id === tech.id ? { ...t, creators: creatorsFromDB } : t)
-            );
-
-            creatorsFromDB.forEach(creator => {
-                const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
-                const videosUnsubscribe = onSnapshot(videosQuery, videoSnapshot => {
-                    const videosFromDB = videoSnapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data() as Omit<Video, 'id' | 'status'>,
-                    }));
-                    
-                    setTechnologies(currentTechs =>
-                      currentTechs.map(t =>
-                        t.id === tech.id
-                          ? {
-                              ...t,
-                              creators: t.creators.map(c =>
-                                c.id === creator.id ? { ...c, videos: videosFromDB } : c
-                              ),
-                            }
-                          : t
-                      )
-                    );
-                });
-                allUnsubscribes.push(videosUnsubscribe);
-            });
-        });
-        allUnsubscribes.push(creatorsUnsubscribe);
-    });
-
-    return () => {
-        allUnsubscribes.forEach(unsub => unsub());
-    };
-}, [technologies.map(t => t.id).join(',')]); // Rerun if technologies list changes
-
-
-  const processedTechnologies = useMemo(() => {
-    return technologies.map(tech => ({
-      ...tech,
-      creators: tech.creators.map((creator: Creator) => ({
-        ...creator,
-        videos: creator.videos.map((video: Video) => ({
-          ...video,
-          status: userStatuses[video.id] || 'Not Started',
-        })),
-      })),
-    }));
-  }, [technologies, userStatuses]);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -263,12 +265,20 @@ useEffect(() => {
           duration: item.duration,
           url: item.url,
         };
-
+        
+        // Handle Excel date which might be a number or a string
         if (item.creationDate) {
-          const date = new Date(item.creationDate);
-          if (!isNaN(date.getTime())) {
-            videoData.createdAt = Timestamp.fromDate(date);
-          }
+            let date: Date;
+            if(typeof item.creationDate === 'number') {
+                // Handle Excel's numeric date format (days since 1900)
+                date = new Date(Math.round((item.creationDate - 25569) * 86400 * 1000));
+            } else {
+                date = new Date(item.creationDate);
+            }
+
+            if (!isNaN(date.getTime())) {
+                videoData.createdAt = Timestamp.fromDate(date);
+            }
         }
 
         // Add video
@@ -324,8 +334,8 @@ useEffect(() => {
     <UserContext.Provider value={{
         user,
         isAdmin,
-        technologies: processedTechnologies,
-        loading,
+        technologies,
+        loading: authLoading || dataLoading,
         signInWithGoogle,
         logout,
         updateVideoStatus,

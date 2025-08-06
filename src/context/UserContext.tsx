@@ -177,14 +177,29 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const addBulkData = async (data: BulkDataItem[]) => {
-      for (const item of data) {
+    for (const item of data) {
+        if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
+            console.warn('Skipping row due to missing required fields:', item);
+            continue;
+        }
+
         let techId = technologies.find(t => t.name.toLowerCase() === item.technology.toLowerCase())?.id;
         if (!techId) {
             techId = await addTechnology({ name: item.technology, description: '' });
         }
 
-        const tech = technologies.find(t => t.id === techId) ?? { creators: [] };
+        // We need an up-to-date representation of technologies to find the creator
+        const allTechnologies = [...technologies];
+        if (!technologies.find(t => t.id === techId)) {
+            // If the tech was just added, we don't have its creators yet. 
+            // A simpler approach for bulk upload might be needed, or refetch.
+            // For now, let's assume this is a rare case and proceed, might need improvement.
+             allTechnologies.push({id: techId, name: item.technology, description: '', creators: []});
+        }
+        
+        const tech = allTechnologies.find(t => t.id === techId) ?? { creators: [] };
         let creatorId = tech.creators.find(c => c.name.toLowerCase() === item.creator.toLowerCase())?.id;
+
         if (!creatorId) {
             creatorId = await addCreator(techId, { name: item.creator });
         }
@@ -195,7 +210,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             url: item.url,
         };
 
-        if (item.creationDate) {
+        if (item.creationDate && !isNaN(item.creationDate.getTime())) {
             videoData.createdAt = Timestamp.fromDate(item.creationDate);
         }
 

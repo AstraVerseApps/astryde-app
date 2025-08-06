@@ -40,29 +40,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
-  
-  const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
-  const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
   const [dataLoading, setDataLoading] = useState(true);
-
-  const technologies = useMemo(() => {
-    // This function creates a new technologies array with updated statuses
-    // whenever rawTechnologies or userStatuses change.
-    if (dataLoading) return [];
-    
-    // Deep clone to ensure child components re-render
-    const newTechnologies = JSON.parse(JSON.stringify(rawTechnologies)) as Technology[];
-    
-    newTechnologies.forEach(tech => {
-      tech.creators.forEach(creator => {
-        creator.videos.forEach(video => {
-          video.status = userStatuses[video.id] || 'Not Started';
-        });
-      });
-    });
-
-    return newTechnologies;
-  }, [rawTechnologies, userStatuses, dataLoading]);
+  const [technologies, setTechnologies] = useState<Technology[]>([]);
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -80,17 +59,19 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!user) {
-        setRawTechnologies([]);
-        setUserStatuses({});
+        setTechnologies([]);
         setDataLoading(false);
         return;
     }
 
     setDataLoading(true);
 
+    let rawTechnologies: Technology[] = [];
+    const unsubscribes: Unsubscribe[] = [];
+
     const techQuery = query(collection(db, 'technologies'));
     const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-        const techsFromDB = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+        rawTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
             const techData = { id: techDoc.id, ...techDoc.data() } as Technology;
             
             const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
@@ -102,29 +83,46 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 const videosSnapshot = await getDocs(videosQuery);
                 creatorData.videos = videosSnapshot.docs.map(videoDoc => ({
                     id: videoDoc.id,
-                    ...videoDoc.data()
+                    ...videoDoc.data(),
+                    status: 'Not Started'
                 } as Video));
                 return creatorData;
             }));
             return techData;
         }));
         
-        setRawTechnologies(techsFromDB);
-        setDataLoading(false);
+        // After fetching all tech, connect statuses
+        connectStatuses();
     });
+    unsubscribes.push(techUnsubscribe);
 
-    const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
-    const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
-        const statuses: Record<string, Video['status']> = {};
-        statusSnapshot.forEach((doc) => {
-            statuses[doc.id] = doc.data().status;
+    const connectStatuses = () => {
+        const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
+        const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
+            const statuses: Record<string, Video['status']> = {};
+            statusSnapshot.forEach((doc) => {
+                statuses[doc.id] = doc.data().status;
+            });
+
+            // Create a deep copy to ensure re-render
+            const newTechnologies = JSON.parse(JSON.stringify(rawTechnologies)) as Technology[];
+            
+            newTechnologies.forEach(tech => {
+                tech.creators.forEach(creator => {
+                    creator.videos.forEach(video => {
+                        video.status = statuses[video.id] || 'Not Started';
+                    });
+                });
+            });
+            
+            setTechnologies(newTechnologies);
+            setDataLoading(false);
         });
-        setUserStatuses(statuses);
-    });
+        unsubscribes.push(statusUnsubscribe);
+    };
 
     return () => {
-        techUnsubscribe();
-        statusUnsubscribe();
+        unsubscribes.forEach(unsub => unsub());
     };
   }, [user]);
 
@@ -151,14 +149,25 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
         await setDoc(userStatusesRef, { status, techId, creatorId }, { merge: true });
+        
         // Optimistically update the local state to provide immediate UI feedback
-        setUserStatuses(prevStatuses => ({
-            ...prevStatuses,
-            [videoId]: status
-        }));
+        setTechnologies(currentTechnologies => {
+          const newTechnologies = JSON.parse(JSON.stringify(currentTechnologies));
+          const tech = newTechnologies.find((t: Technology) => t.id === techId);
+          if (tech) {
+            const creator = tech.creators.find((c: Creator) => c.id === creatorId);
+            if (creator) {
+              const video = creator.videos.find((v: Video) => v.id === videoId);
+              if (video) {
+                video.status = status;
+              }
+            }
+          }
+          return newTechnologies;
+        });
+
     } catch (e) {
         console.error("Failed to update status: ", e);
-        // Optionally revert the change on failure
     }
   };
 
@@ -331,3 +340,5 @@ export const useUser = () => {
   }
   return context;
 };
+
+    

@@ -92,13 +92,17 @@ export default function DashboardPage() {
   
   const videoProgress = useMemo(() => {
     if (view !== 'videos' || !selectedCreator) {
-        return null;
+      return null;
     }
-    const completed = selectedCreator.videos.filter(v => v.status === 'Completed').length;
-    const inProgress = selectedCreator.videos.filter(v => v.status === 'In Progress').length;
-    const notStarted = selectedCreator.videos.filter(v => v.status === 'Not Started').length;
+    const currentTech = technologies.find(t => t.id === selectedTech?.id);
+    const currentCreator = currentTech?.creators.find(c => c.id === selectedCreator?.id);
+    if (!currentCreator) return null;
+
+    const completed = currentCreator.videos.filter(v => v.status === 'Completed').length;
+    const inProgress = currentCreator.videos.filter(v => v.status === 'In Progress').length;
+    const notStarted = currentCreator.videos.filter(v => v.status === 'Not Started').length;
     return { completed, inProgress, notStarted };
-  }, [view, selectedCreator]);
+  }, [view, selectedTech, selectedCreator, technologies]);
 
   const statusStyles: Record<Video['status'], string> = {
     'Completed': 'bg-green-500/10 border-green-500/50 hover:bg-green-500/20',
@@ -171,8 +175,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {view === 'videos' && selectedCreator && (
-         <div className="space-y-4">
+      {view === 'videos' && selectedCreator && selectedTech && (() => {
+        const creator = technologies
+            .find(t => t.id === selectedTech.id)
+            ?.creators.find(c => c.id === selectedCreator.id);
+
+        return (
+            <div className="space-y-4">
             {videoProgress && (
                 <Card>
                     <CardContent className="p-4 flex justify-around">
@@ -192,7 +201,7 @@ export default function DashboardPage() {
                 </Card>
             )}
 
-            {selectedCreator.videos.length > 0 ? selectedCreator.videos.map(video => (
+            {creator && creator.videos.length > 0 ? creator.videos.map(video => (
                 <Dialog key={video.id}>
                     <Card className={cn(
                         "flex flex-col md:flex-row items-center justify-between p-4 group transition-all",
@@ -245,8 +254,11 @@ export default function DashboardPage() {
                     <p>This creator hasn't added any videos for this technology yet.</p>
                 </div>
             )}
-        </div>
-      )}
+            </div>
+        )
+      })()}
     </>
   );
 }
+
+    

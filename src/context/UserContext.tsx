@@ -193,11 +193,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const findOrCreateDocument = async (collPath: string, fieldName: string, fieldValue: string, createData: any) => {
-    const q = query(collection(db, collPath), where(fieldName, '==', fieldValue));
-    const snapshot = await getDocs(q);
+    const q = query(collection(db, collPath), where(fieldName, "==", fieldValue));
+    const querySnapshot = await getDocs(q);
 
-    if (!snapshot.empty) {
-        return snapshot.docs[0].id;
+    if (!querySnapshot.empty) {
+        return querySnapshot.docs[0].id;
     } else {
         const docRef = await addDoc(collection(db, collPath), createData);
         return docRef.id;
@@ -206,9 +206,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
     let i = 0;
-    const techIdCache: Record<string, string> = {};
-    const creatorIdCache: Record<string, string> = {};
-
     for (const item of data) {
         if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
             console.warn('Skipping row due to missing required fields:', item);
@@ -218,52 +215,30 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
-            // Technology
-            let techId = techIdCache[item.technology];
-            if (!techId) {
-                techId = await findOrCreateDocument('technologies', 'name', item.technology, {
-                    name: item.technology,
-                    description: ''
-                });
-                techIdCache[item.technology] = techId;
-            }
+            // Find or create technology
+            const techId = await findOrCreateDocument('technologies', 'name', item.technology, {
+                name: item.technology,
+                description: ''
+            });
 
-            // Creator
-            const creatorCacheKey = `${techId}_${item.creator}`;
-            let creatorId = creatorIdCache[creatorCacheKey];
-            if (!creatorId) {
-                creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
-                    name: item.creator,
-                    avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`
-                });
-                creatorIdCache[creatorCacheKey] = creatorId;
-            }
+            // Find or create creator
+            const creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
+                name: item.creator,
+                avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`
+            });
             
-            // Video
+            // Prepare video data
             const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
                 title: item.videoTitle,
                 duration: item.duration,
                 url: item.url,
             };
 
-            // Handle Excel date (which can be a number or a string)
-            if (item.creationDate) {
-                let date = item.creationDate;
-                // Check if it's an Excel serial number date
-                if (typeof date === 'number') {
-                     // Convert Excel's serial number (days since 1900) to JS timestamp
-                     const utc_days  = Math.floor(date - 25569);
-                     const utc_value = utc_days * 86400;                                        
-                     const date_info = new Date(utc_value * 1000);
-                     date = new Date(date_info.getUTCFullYear(), date_info.getUTCMonth(), date_info.getUTCDate());
-                }
-                
-                if (date instanceof Date && !isNaN(date.getTime())) {
-                    videoData.createdAt = Timestamp.fromDate(date);
-                }
+            if (item.creationDate instanceof Date && !isNaN(item.creationDate.getTime())) {
+                videoData.createdAt = Timestamp.fromDate(item.creationDate);
             }
 
-
+            // Add video
             await addVideo(techId, creatorId, videoData);
 
         } catch (error) {

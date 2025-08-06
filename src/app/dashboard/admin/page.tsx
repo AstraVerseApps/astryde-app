@@ -181,7 +181,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleBulkUpload = () => {
+  const handleBulkUpload = async () => {
     if (!excelFile) {
         toast({ variant: 'destructive', title: 'Error', description: 'Please select an Excel file to upload.' });
         return;
@@ -189,47 +189,38 @@ export default function AdminPage() {
 
     setIsUploading(true);
     setUploadProgress(0);
+    
+    try {
+        const data = await excelFile.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'buffer', cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
+        
+        const bulkData = json.map((row: any) => ({
+            technology: row.Technology,
+            creator: row.Creator,
+            videoTitle: row.VideoTitle,
+            duration: String(row.Duration),
+            url: row.URL,
+            creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
+        }));
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const data = e.target?.result;
-            const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet);
+        await addBulkData(bulkData, (progress) => {
+            setUploadProgress(progress);
+        });
 
-            const bulkData = json.map((row: any) => ({
-                technology: row.Technology,
-                creator: row.Creator,
-                videoTitle: row.VideoTitle,
-                duration: row.Duration,
-                url: row.URL,
-                creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
-            }));
-
-            await addBulkData(bulkData, (progress) => {
-                setUploadProgress(progress);
-            });
-
-            toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
-        } catch (error) {
-            console.error("Failed to process Excel file:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });
-        } finally {
-            setIsUploading(false);
-            setExcelFile(null);
-            const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
-            if(fileInput) fileInput.value = '';
-            setTimeout(() => setUploadProgress(0), 2000); // Hide progress bar after 2s
-        }
-    };
-    reader.onerror = (error) => {
-        console.error("File reading error:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to read the selected file.' });
+        toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
+    } catch (error) {
+        console.error("Failed to process Excel file:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });
+    } finally {
         setIsUploading(false);
-    };
-    reader.readAsBinaryString(excelFile);
+        setExcelFile(null);
+        const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
+        if(fileInput) fileInput.value = '';
+        setTimeout(() => setUploadProgress(0), 2000); // Hide progress bar after 2s
+    }
   };
 
 

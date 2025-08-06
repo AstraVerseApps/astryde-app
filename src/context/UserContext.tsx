@@ -43,8 +43,26 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   
   const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
-  const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+
+  const technologies = useMemo(() => {
+    // This function creates a new technologies array with updated statuses
+    // whenever rawTechnologies or userStatuses change.
+    if (dataLoading) return [];
+    
+    // Deep clone to ensure child components re-render
+    const newTechnologies = JSON.parse(JSON.stringify(rawTechnologies)) as Technology[];
+    
+    newTechnologies.forEach(tech => {
+      tech.creators.forEach(creator => {
+        creator.videos.forEach(video => {
+          video.status = userStatuses[video.id] || 'Not Started';
+        });
+      });
+    });
+
+    return newTechnologies;
+  }, [rawTechnologies, userStatuses, dataLoading]);
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -69,11 +87,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setDataLoading(true);
-    let isMounted = true;
 
     const techQuery = query(collection(db, 'technologies'));
     const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-        if (!isMounted) return;
         const techsFromDB = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
             const techData = { id: techDoc.id, ...techDoc.data() } as Technology;
             
@@ -93,49 +109,24 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             return techData;
         }));
         
-        if (isMounted) {
-            setRawTechnologies(techsFromDB);
-            setDataLoading(false);
-        }
+        setRawTechnologies(techsFromDB);
+        setDataLoading(false);
     });
 
     const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
     const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
-        if (!isMounted) return;
         const statuses: Record<string, Video['status']> = {};
         statusSnapshot.forEach((doc) => {
             statuses[doc.id] = doc.data().status;
         });
-        if(isMounted) {
-            setUserStatuses(statuses);
-        }
+        setUserStatuses(statuses);
     });
 
     return () => {
-        isMounted = false;
         techUnsubscribe();
         statusUnsubscribe();
     };
   }, [user]);
-
-  useEffect(() => {
-    if (dataLoading) {
-      setTechnologies([]);
-      return;
-    }
-    // Deep clone to ensure child components re-render
-    const newTechnologies = JSON.parse(JSON.stringify(rawTechnologies)) as Technology[];
-    
-    newTechnologies.forEach(tech => {
-      tech.creators.forEach(creator => {
-        creator.videos.forEach(video => {
-          video.status = userStatuses[video.id] || 'Not Started';
-        });
-      });
-    });
-
-    setTechnologies(newTechnologies);
-  }, [rawTechnologies, userStatuses, dataLoading]);
 
 
   const signInWithGoogle = async () => {
@@ -160,8 +151,14 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
         await setDoc(userStatusesRef, { status, techId, creatorId }, { merge: true });
+        // Optimistically update the local state to provide immediate UI feedback
+        setUserStatuses(prevStatuses => ({
+            ...prevStatuses,
+            [videoId]: status
+        }));
     } catch (e) {
         console.error("Failed to update status: ", e);
+        // Optionally revert the change on failure
     }
   };
 

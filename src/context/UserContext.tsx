@@ -38,103 +38,83 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 const useFirestoreData = (user: User | null) => {
     const [technologies, setTechnologies] = useState<Technology[]>([]);
-    const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!user) {
             setTechnologies([]);
-            setUserStatuses({});
             setLoading(false);
             return;
         }
 
         setLoading(true);
+        let userStatuses: Record<string, Video['status']> = {};
 
         const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
         const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
-            const newStatuses: Record<string, Video['status']> = {};
             snapshot.docs.forEach(doc => {
-                newStatuses[doc.id] = doc.data().status;
+                userStatuses[doc.id] = doc.data().status;
             });
-            setUserStatuses(newStatuses);
+            // Re-apply statuses to existing technology data
+            setTechnologies(currentTechs =>
+                currentTechs.map(tech => ({
+                    ...tech,
+                    creators: tech.creators.map(creator => ({
+                        ...creator,
+                        videos: creator.videos.map(video => ({
+                            ...video,
+                            status: userStatuses[video.id] || 'Not Started',
+                        })),
+                    })),
+                }))
+            );
         });
 
         const techQuery = query(collection(db, 'technologies'));
         const techUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
+            const unsubscribes: Unsubscribe[] = [];
+            
             const techsFromDB = techSnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
                 creators: [],
             } as Technology));
 
-            setTechnologies(techsFromDB);
-
-            const creatorUnsubscribes = techsFromDB.flatMap(tech => {
+            Promise.all(techsFromDB.map(async (tech) => {
                 const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
-                return onSnapshot(creatorsQuery, (creatorSnapshot) => {
-                    const creatorsFromDB = creatorSnapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data(),
+                const creatorsSnapshot = await getDocs(creatorsQuery);
+                tech.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
+                    const creator: Creator = {
+                        id: creatorDoc.id,
+                        ...creatorDoc.data(),
                         videos: [],
-                    } as Creator));
-
-                    setTechnologies(currentTechs =>
-                        currentTechs.map(t =>
-                            t.id === tech.id ? { ...t, creators: creatorsFromDB } : t
-                        )
-                    );
-
-                    const videoUnsubscribes = creatorsFromDB.flatMap(creator => {
-                        const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
-                        return onSnapshot(videosQuery, (videoSnapshot) => {
-                            const videosFromDB = videoSnapshot.docs.map(doc => ({
-                                id: doc.id,
-                                ...doc.data(),
-                            } as Video));
-
-                            setTechnologies(currentTechs =>
-                                currentTechs.map(t =>
-                                    t.id === tech.id
-                                        ? {
-                                            ...t,
-                                            creators: t.creators.map(c =>
-                                                c.id === creator.id ? { ...c, videos: videosFromDB } : c
-                                            ),
-                                        }
-                                        : t
-                                )
-                            );
-                        });
-                    });
-                    return () => videoUnsubscribes.forEach(unsub => unsub());
-                });
+                    };
+                    const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
+                    const videosSnapshot = await getDocs(videosQuery);
+                    creator.videos = videosSnapshot.docs.map(videoDoc => ({
+                        id: videoDoc.id,
+                        ...videoDoc.data(),
+                        status: userStatuses[videoDoc.id] || 'Not Started',
+                    } as Video));
+                    return creator;
+                }));
+                return tech;
+            })).then(fullTechs => {
+                setTechnologies(fullTechs);
+                setLoading(false);
             });
-             setLoading(false);
-             return () => creatorUnsubscribes.forEach(unsub => unsub());
-        });
 
+            return () => unsubscribes.forEach(unsub => unsub());
+        });
+        
         return () => {
             statusesUnsubscribe();
             techUnsubscribe();
         };
+
     }, [user]);
 
-    const processedTechnologies = useMemo(() => {
-        if (loading) return [];
-        return technologies.map(tech => ({
-            ...tech,
-            creators: tech.creators.map(creator => ({
-                ...creator,
-                videos: creator.videos.map(video => ({
-                    ...video,
-                    status: userStatuses[video.id] || 'Not Started',
-                })),
-            })),
-        }));
-    }, [technologies, userStatuses, loading]);
-
-    return { technologies: processedTechnologies, loading };
+    return { technologies, loading };
 };
 
 

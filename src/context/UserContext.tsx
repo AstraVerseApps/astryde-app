@@ -60,47 +60,56 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!user) {
-      setTechnologies([]);
-      setUserStatuses({});
-      return;
+        setTechnologies([]);
+        setUserStatuses({});
+        return;
     }
 
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
-      const newStatuses: Record<string, Video['status']> = {};
-      snapshot.docs.forEach(doc => {
-        newStatuses[doc.id] = doc.data().status;
-      });
-      setUserStatuses(newStatuses);
+        const newStatuses: Record<string, Video['status']> = {};
+        snapshot.docs.forEach(doc => {
+            newStatuses[doc.id] = doc.data().status;
+        });
+        setUserStatuses(newStatuses);
     });
 
     const techQuery = query(collection(db, 'technologies'));
     const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
         setLoading(true);
-        const techs: Technology[] = await Promise.all(
+        const techs = await Promise.all(
             techSnapshot.docs.map(async (techDoc) => {
                 const creatorsSnapshot = await getDocs(
                     query(collection(db, `technologies/${techDoc.id}/creators`))
                 );
-                const creators: Creator[] = await Promise.all(
+                const creators = await Promise.all(
                     creatorsSnapshot.docs.map(async (creatorDoc) => {
                         const videosSnapshot = await getDocs(
                             query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"))
                         );
-                        const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
-                            id: videoDoc.id,
-                            ...(videoDoc.data() as Omit<Video, 'id'>)
-                        }));
+                        const videos = videosSnapshot.docs.map(videoDoc => {
+                            const data = videoDoc.data();
+                            return {
+                                id: videoDoc.id,
+                                title: data.title,
+                                duration: data.duration,
+                                url: data.url,
+                                status: 'Not Started', 
+                                createdAt: data.createdAt
+                            };
+                        });
                         return {
                             id: creatorDoc.id,
-                            ...(creatorDoc.data() as Omit<Creator, 'id' | 'videos'>),
+                            name: creatorDoc.data().name,
+                            avatar: creatorDoc.data().avatar,
                             videos
                         };
                     })
                 );
                 return {
                     id: techDoc.id,
-                    ...(techDoc.data() as Omit<Technology, 'id' | 'creators'>),
+                    name: techDoc.data().name,
+                    description: techDoc.data().description,
                     creators
                 };
             })
@@ -110,10 +119,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => {
-      statusesUnsubscribe();
-      techUnsubscribe();
+        statusesUnsubscribe();
+        techUnsubscribe();
     };
-  }, [user]);
+}, [user]);
+
 
   const processedTechnologies = useMemo(() => {
     return technologies.map(tech => ({
@@ -196,6 +206,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
     let i = 0;
+    const techIdCache: Record<string, string> = {};
+    const creatorIdCache: Record<string, string> = {};
+
     for (const item of data) {
         if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
             console.warn('Skipping row due to missing required fields:', item);
@@ -205,24 +218,51 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
-            const techId = await findOrCreateDocument('technologies', 'name', item.technology, {
-                name: item.technology,
-                description: ''
-            });
+            // Technology
+            let techId = techIdCache[item.technology];
+            if (!techId) {
+                techId = await findOrCreateDocument('technologies', 'name', item.technology, {
+                    name: item.technology,
+                    description: ''
+                });
+                techIdCache[item.technology] = techId;
+            }
 
-            const creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
-                name: item.creator,
-                avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`
-            });
+            // Creator
+            const creatorCacheKey = `${techId}_${item.creator}`;
+            let creatorId = creatorIdCache[creatorCacheKey];
+            if (!creatorId) {
+                creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
+                    name: item.creator,
+                    avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`
+                });
+                creatorIdCache[creatorCacheKey] = creatorId;
+            }
             
+            // Video
             const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
                 title: item.videoTitle,
                 duration: item.duration,
                 url: item.url,
             };
-            if (item.creationDate && !isNaN(item.creationDate.getTime())) {
-                videoData.createdAt = Timestamp.fromDate(item.creationDate);
+
+            // Handle Excel date (which can be a number or a string)
+            if (item.creationDate) {
+                let date = item.creationDate;
+                // Check if it's an Excel serial number date
+                if (typeof date === 'number') {
+                     // Convert Excel's serial number (days since 1900) to JS timestamp
+                     const utc_days  = Math.floor(date - 25569);
+                     const utc_value = utc_days * 86400;                                        
+                     const date_info = new Date(utc_value * 1000);
+                     date = new Date(date_info.getUTCFullYear(), date_info.getUTCMonth(), date_info.getUTCDate());
+                }
+                
+                if (date instanceof Date && !isNaN(date.getTime())) {
+                    videoData.createdAt = Timestamp.fromDate(date);
+                }
             }
+
 
             await addVideo(techId, creatorId, videoData);
 

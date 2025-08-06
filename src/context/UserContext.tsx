@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, getDoc, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 
@@ -64,7 +64,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!user) {
-      setTechnologies([]);
+      memoizedSetTechnologies([]);
       setUserStatuses({});
       setLoading(false);
       return;
@@ -177,44 +177,57 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
-    const localTechCache: (Omit<Technology, 'creators'> & { creators: (Omit<Creator, 'videos'>)[] })[] = JSON.parse(JSON.stringify(technologies));
-
     for (let i = 0; i < data.length; i++) {
-        const item = data[i];
+      const item = data[i];
 
-        if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
-            console.warn('Skipping row due to missing required fields:', item);
-            continue;
+      if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
+        console.warn('Skipping row due to missing required fields:', item);
+        continue;
+      }
+      
+      try {
+        // 1. Find or create Technology
+        const techQuery = query(collection(db, 'technologies'), where('name', '==', item.technology));
+        let techSnapshot = await getDocs(techQuery);
+        let techId: string;
+
+        if (techSnapshot.empty) {
+          techId = await addTechnology({ name: item.technology, description: '' });
+        } else {
+          techId = techSnapshot.docs[0].id;
         }
 
-        let tech = localTechCache.find(t => t.name.toLowerCase() === item.technology.toLowerCase());
-        if (!tech) {
-            const newTechId = await addTechnology({ name: item.technology, description: '' });
-            tech = { id: newTechId, name: item.technology, description: '', creators: [] };
-            localTechCache.push(tech);
+        // 2. Find or create Creator
+        const creatorQuery = query(collection(db, `technologies/${techId}/creators`), where('name', '==', item.creator));
+        let creatorSnapshot = await getDocs(creatorQuery);
+        let creatorId: string;
+        
+        if (creatorSnapshot.empty) {
+          creatorId = await addCreator(techId, { name: item.creator });
+        } else {
+          creatorId = creatorSnapshot.docs[0].id;
         }
 
-        let creator = tech.creators.find(c => c.name.toLowerCase() === item.creator.toLowerCase());
-        if (!creator) {
-            const newCreatorId = await addCreator(tech.id, { name: item.creator });
-            creator = { id: newCreatorId, name: item.creator, avatar: '' }; // Avatar is set in addCreator
-            tech.creators.push(creator);
-        }
-
+        // 3. Add Video
         const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
-            title: item.videoTitle,
-            duration: item.duration,
-            url: item.url,
+          title: item.videoTitle,
+          duration: item.duration,
+          url: item.url,
         };
 
         if (item.creationDate && !isNaN(item.creationDate.getTime())) {
-            videoData.createdAt = Timestamp.fromDate(item.creationDate);
+          videoData.createdAt = Timestamp.fromDate(item.creationDate);
         }
 
-        await addVideo(tech.id, creator.id, videoData);
-        onProgress(((i + 1) / data.length) * 100);
+        await addVideo(techId, creatorId, videoData);
+
+      } catch (error) {
+        console.error("Error processing row:", item, "Error:", error);
+      }
+      
+      onProgress(((i + 1) / data.length) * 100);
     }
-};
+  };
 
 
   const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {
@@ -243,7 +256,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
 
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();

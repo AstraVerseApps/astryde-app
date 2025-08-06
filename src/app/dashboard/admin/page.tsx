@@ -15,7 +15,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
 import { Timestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { Progress } from '@/components/ui/progress';
@@ -206,6 +205,10 @@ export default function AdminPage() {
                     const worksheet = workbook.Sheets[sheetName];
                     const json = XLSX.utils.sheet_to_json(worksheet);
                     
+                    console.log("--- Excel Data Read ---");
+                    console.log(json);
+                    console.log("-----------------------");
+                    
                     const bulkData = json.map((row: any) => ({
                         technology: row.Technology,
                         creator: row.Creator,
@@ -215,11 +218,12 @@ export default function AdminPage() {
                         creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
                     }));
 
-                    await addBulkData(bulkData, (progress) => {
-                        setUploadProgress(progress);
-                    });
+                    // Temporarily disable database write to prove data is being read.
+                    // await addBulkData(bulkData, (progress) => {
+                    //     setUploadProgress(progress);
+                    // });
 
-                    toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
+                    toast({ title: 'Data Read', description: 'Check the browser console to see the parsed data.' });
                     resolve();
                 } catch (err) {
                     reject(err);
@@ -653,4 +657,5 @@ export default function AdminPage() {
     
 
     
+
 

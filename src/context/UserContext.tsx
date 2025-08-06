@@ -43,6 +43,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   
   const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
   const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
+  const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
@@ -68,6 +69,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setDataLoading(true);
+    let isMounted = true;
+
     const techQuery = query(collection(db, 'technologies'));
     const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
         const techsFromDB = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
@@ -83,15 +86,16 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 const videosSnapshot = await getDocs(videosQuery);
                 creatorData.videos = videosSnapshot.docs.map(videoDoc => ({
                     id: videoDoc.id,
-                    ...videoDoc.data(),
-                    status: 'Not Started' // Default status
+                    ...videoDoc.data()
                 } as Video));
                 return creatorData;
             }));
             return techData;
         }));
-        setRawTechnologies(techsFromDB);
-        setDataLoading(false);
+        if (isMounted) {
+            setRawTechnologies(techsFromDB);
+            setDataLoading(false);
+        }
     });
 
     const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
@@ -100,29 +104,38 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         statusSnapshot.forEach((doc) => {
             statuses[doc.id] = doc.data().status;
         });
-        setUserStatuses(statuses);
+        if(isMounted) {
+            setUserStatuses(statuses);
+        }
     });
 
     return () => {
+        isMounted = false;
         techUnsubscribe();
         statusUnsubscribe();
     };
 }, [user]);
 
-  const technologies = useMemo(() => {
-    if (!rawTechnologies || rawTechnologies.length === 0) return [];
+  useEffect(() => {
+      if (!rawTechnologies.length && !dataLoading) {
+          setTechnologies([]);
+          return;
+      }
+      
+      // Create a new array to ensure React detects the change.
+      const newTechnologies = rawTechnologies.map(tech => ({
+          ...tech,
+          creators: tech.creators.map(creator => ({
+              ...creator,
+              videos: creator.videos.map(video => ({
+                  ...video,
+                  status: userStatuses[video.id] || 'Not Started'
+              }))
+          }))
+      }));
+      setTechnologies(newTechnologies);
 
-    return rawTechnologies.map(tech => ({
-        ...tech,
-        creators: tech.creators.map(creator => ({
-            ...creator,
-            videos: creator.videos.map(video => ({
-                ...video,
-                status: userStatuses[video.id] || 'Not Started'
-            }))
-        }))
-    }));
-  }, [rawTechnologies, userStatuses]);
+  }, [rawTechnologies, userStatuses, dataLoading]);
 
 
   const signInWithGoogle = async () => {

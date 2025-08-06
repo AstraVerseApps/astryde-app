@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Timestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import { Progress } from '@/components/ui/progress';
 
 export default function AdminPage() {
   const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo, addBulkData } = useUser();
@@ -43,6 +44,8 @@ export default function AdminPage() {
 
   // Bulk upload state
   const [excelFile, setExcelFile] = React.useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+  const [isUploading, setIsUploading] = React.useState(false);
 
 
   // Delete state
@@ -196,6 +199,9 @@ export default function AdminPage() {
         return;
     }
 
+    setIsUploading(true);
+    setUploadProgress(0);
+
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
@@ -214,21 +220,27 @@ export default function AdminPage() {
                 creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
             }));
 
-            await addBulkData(bulkData);
+            await addBulkData(bulkData, (progress) => {
+                setUploadProgress(progress);
+            });
+
             toast({ title: 'Success', description: 'Bulk data has been processed and added.' });
+        } catch (error) {
+            console.error("Failed to process Excel file:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });
+        } finally {
+            setIsUploading(false);
             setExcelFile(null);
             // Clear the file input visually
             const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
             if(fileInput) fileInput.value = '';
-
-        } catch (error) {
-            console.error("Failed to process Excel file:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });
+            setTimeout(() => setUploadProgress(0), 2000); // Hide progress bar after 2s
         }
     };
     reader.onerror = (error) => {
         console.error("File reading error:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Failed to read the selected file.' });
+        setIsUploading(false);
     };
     reader.readAsBinaryString(excelFile);
   };
@@ -494,13 +506,23 @@ export default function AdminPage() {
                                 accept=".xlsx, .xls"
                                 onChange={(e) => setExcelFile(e.target.files ? e.target.files[0] : null)}
                                 className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                disabled={isUploading}
                             />
                         </div>
+                         {isUploading && (
+                            <div className="space-y-2">
+                                <Label>Upload Progress</Label>
+                                <div className="flex items-center gap-4">
+                                    <Progress value={uploadProgress} className="w-full" />
+                                    <span className="text-sm font-medium text-muted-foreground">{Math.round(uploadProgress)}%</span>
+                                </div>
+                            </div>
+                        )}
                     </CardContent>
                     <div className="p-6 pt-0">
-                        <Button className="w-full" onClick={handleBulkUpload} disabled={!excelFile}>
+                        <Button className="w-full" onClick={handleBulkUpload} disabled={!excelFile || isUploading}>
                             <FileUp className="mr-2 h-4 w-4" />
-                            Upload and Process
+                             {isUploading ? 'Processing...' : 'Upload and Process'}
                         </Button>
                     </div>
                 </Card>

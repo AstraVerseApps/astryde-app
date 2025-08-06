@@ -31,7 +31,7 @@ interface UserContextType {
   deleteTechnology: (techId: string) => Promise<void>;
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
-  addBulkData: (data: BulkDataItem[]) => Promise<void>;
+  addBulkData: (data: BulkDataItem[], onProgress: (progress: number) => void) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -176,32 +176,29 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), videoData);
   };
   
-  const addBulkData = async (data: BulkDataItem[]) => {
-    for (const item of data) {
+  const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
+    const localTechCache: (Omit<Technology, 'creators'> & { creators: (Omit<Creator, 'videos'>)[] })[] = JSON.parse(JSON.stringify(technologies));
+
+    for (let i = 0; i < data.length; i++) {
+        const item = data[i];
+
         if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
             console.warn('Skipping row due to missing required fields:', item);
             continue;
         }
 
-        let techId = technologies.find(t => t.name.toLowerCase() === item.technology.toLowerCase())?.id;
-        if (!techId) {
-            techId = await addTechnology({ name: item.technology, description: '' });
+        let tech = localTechCache.find(t => t.name.toLowerCase() === item.technology.toLowerCase());
+        if (!tech) {
+            const newTechId = await addTechnology({ name: item.technology, description: '' });
+            tech = { id: newTechId, name: item.technology, description: '', creators: [] };
+            localTechCache.push(tech);
         }
 
-        // We need an up-to-date representation of technologies to find the creator
-        const allTechnologies = [...technologies];
-        if (!technologies.find(t => t.id === techId)) {
-            // If the tech was just added, we don't have its creators yet. 
-            // A simpler approach for bulk upload might be needed, or refetch.
-            // For now, let's assume this is a rare case and proceed, might need improvement.
-             allTechnologies.push({id: techId, name: item.technology, description: '', creators: []});
-        }
-        
-        const tech = allTechnologies.find(t => t.id === techId) ?? { creators: [] };
-        let creatorId = tech.creators.find(c => c.name.toLowerCase() === item.creator.toLowerCase())?.id;
-
-        if (!creatorId) {
-            creatorId = await addCreator(techId, { name: item.creator });
+        let creator = tech.creators.find(c => c.name.toLowerCase() === item.creator.toLowerCase());
+        if (!creator) {
+            const newCreatorId = await addCreator(tech.id, { name: item.creator });
+            creator = { id: newCreatorId, name: item.creator, avatar: '' }; // Avatar is set in addCreator
+            tech.creators.push(creator);
         }
 
         const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
@@ -214,9 +211,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             videoData.createdAt = Timestamp.fromDate(item.creationDate);
         }
 
-        await addVideo(techId, creatorId, videoData);
+        await addVideo(tech.id, creator.id, videoData);
+        onProgress(((i + 1) / data.length) * 100);
     }
-  };
+};
 
 
   const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {

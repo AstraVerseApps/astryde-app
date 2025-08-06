@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, getDoc, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, where, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Video, Technology, Creator } from '@/types';
 
@@ -58,19 +58,13 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => authUnsubscribe();
   }, []);
 
-  const memoizedSetTechnologies = useCallback((newTechnologies: Technology[]) => {
-    setTechnologies(newTechnologies);
-  }, []);
-
   useEffect(() => {
     if (!user) {
-      memoizedSetTechnologies([]);
+      setTechnologies([]);
       setUserStatuses({});
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
       const newStatuses: Record<string, Video['status']> = {};
@@ -81,33 +75,45 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
 
     const techQuery = query(collection(db, 'technologies'));
-    const techUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
-      const promises = techSnapshot.docs.map(async (techDoc) => {
-        const techData = { id: techDoc.id, ...techDoc.data() } as Omit<Technology, 'creators'>;
-        const creatorsSnapshot = await getDocs(query(collection(db, `technologies/${techDoc.id}/creators`)));
-        const creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
-          const creatorData = { id: creatorDoc.id, ...creatorDoc.data() } as Omit<Creator, 'videos'>;
-          const videosSnapshot = await getDocs(query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc")));
-          const videos = videosSnapshot.docs.map(videoDoc => ({
-            id: videoDoc.id,
-            ...videoDoc.data(),
-          } as Video));
-          return { ...creatorData, videos };
-        }));
-        return { ...techData, creators };
-      });
-
-      Promise.all(promises).then(newTechnologies => {
-        memoizedSetTechnologies(newTechnologies);
+    const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
+        setLoading(true);
+        const techs: Technology[] = await Promise.all(
+            techSnapshot.docs.map(async (techDoc) => {
+                const creatorsSnapshot = await getDocs(
+                    query(collection(db, `technologies/${techDoc.id}/creators`))
+                );
+                const creators: Creator[] = await Promise.all(
+                    creatorsSnapshot.docs.map(async (creatorDoc) => {
+                        const videosSnapshot = await getDocs(
+                            query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"))
+                        );
+                        const videos: Video[] = videosSnapshot.docs.map(videoDoc => ({
+                            id: videoDoc.id,
+                            ...(videoDoc.data() as Omit<Video, 'id'>)
+                        }));
+                        return {
+                            id: creatorDoc.id,
+                            ...(creatorDoc.data() as Omit<Creator, 'id' | 'videos'>),
+                            videos
+                        };
+                    })
+                );
+                return {
+                    id: techDoc.id,
+                    ...(techDoc.data() as Omit<Technology, 'id' | 'creators'>),
+                    creators
+                };
+            })
+        );
+        setTechnologies(techs);
         setLoading(false);
-      });
     });
 
     return () => {
       statusesUnsubscribe();
       techUnsubscribe();
     };
-  }, [user, memoizedSetTechnologies]);
+  }, [user]);
 
   const processedTechnologies = useMemo(() => {
     return technologies.map(tech => ({
@@ -176,56 +182,55 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     await addDoc(collection(db, `technologies/${techId}/creators/${creatorId}/videos`), videoData);
   };
   
+  const findOrCreateDocument = async (collPath: string, fieldName: string, fieldValue: string, createData: any) => {
+    const q = query(collection(db, collPath), where(fieldName, '==', fieldValue));
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+        return snapshot.docs[0].id;
+    } else {
+        const docRef = await addDoc(collection(db, collPath), createData);
+        return docRef.id;
+    }
+  };
+
   const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
     for (let i = 0; i < data.length; i++) {
-      const item = data[i];
+        const item = data[i];
 
-      if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
-        console.warn('Skipping row due to missing required fields:', item);
-        continue;
-      }
-      
-      try {
-        // 1. Find or create Technology
-        const techQuery = query(collection(db, 'technologies'), where('name', '==', item.technology));
-        let techSnapshot = await getDocs(techQuery);
-        let techId: string;
-
-        if (techSnapshot.empty) {
-          techId = await addTechnology({ name: item.technology, description: '' });
-        } else {
-          techId = techSnapshot.docs[0].id;
+        if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
+            console.warn('Skipping row due to missing required fields:', item);
+            onProgress(((i + 1) / data.length) * 100);
+            continue;
         }
 
-        // 2. Find or create Creator
-        const creatorQuery = query(collection(db, `technologies/${techId}/creators`), where('name', '==', item.creator));
-        let creatorSnapshot = await getDocs(creatorQuery);
-        let creatorId: string;
-        
-        if (creatorSnapshot.empty) {
-          creatorId = await addCreator(techId, { name: item.creator });
-        } else {
-          creatorId = creatorSnapshot.docs[0].id;
+        try {
+            const techId = await findOrCreateDocument('technologies', 'name', item.technology, {
+                name: item.technology,
+                description: ''
+            });
+
+            const creatorId = await findOrCreateDocument(`technologies/${techId}/creators`, 'name', item.creator, {
+                name: item.creator,
+                avatar: `https://placehold.co/100x100/1E3A8A/FFFFFF/png?text=${item.creator.charAt(0)}`
+            });
+            
+            const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
+                title: item.videoTitle,
+                duration: item.duration,
+                url: item.url,
+            };
+            if (item.creationDate && !isNaN(item.creationDate.getTime())) {
+                videoData.createdAt = Timestamp.fromDate(item.creationDate);
+            }
+
+            await addVideo(techId, creatorId, videoData);
+
+        } catch (error) {
+            console.error("Error processing row:", item, "Error:", error);
         }
 
-        // 3. Add Video
-        const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
-          title: item.videoTitle,
-          duration: item.duration,
-          url: item.url,
-        };
-
-        if (item.creationDate && !isNaN(item.creationDate.getTime())) {
-          videoData.createdAt = Timestamp.fromDate(item.creationDate);
-        }
-
-        await addVideo(techId, creatorId, videoData);
-
-      } catch (error) {
-        console.error("Error processing row:", item, "Error:", error);
-      }
-      
-      onProgress(((i + 1) / data.length) * 100);
+        onProgress(((i + 1) / data.length) * 100);
     }
   };
 
@@ -255,8 +260,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const deleteCreator = async (techId: string, creatorId: string) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
-
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
+    
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();
@@ -295,3 +300,5 @@ export const useUser = () => {
   }
   return context;
 };
+
+    

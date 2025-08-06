@@ -12,7 +12,6 @@ import type { Creator, Video } from '@/types';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useUser } from '@/context/UserContext';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -24,7 +23,6 @@ import { Progress } from '@/components/ui/progress';
 export default function AdminPage() {
   const { technologies, addTechnology, addCreator, addVideo, deleteTechnology, deleteCreator, deleteVideo, addBulkData } = useUser();
   const { toast } = useToast();
-  const router = useRouter();
 
   const [creatorsForTech, setCreatorsForTech] = React.useState<Creator[]>([]);
   
@@ -55,15 +53,6 @@ export default function AdminPage() {
   const [selectedVideoForDelete, setSelectedVideoForDelete] = React.useState<string>('');
 
   React.useEffect(() => {
-    const now = new Date();
-    const istOffset = 330 * 60000; // 5.5 hours in milliseconds
-    const istTime = new Date(now.getTime() + istOffset);
-    
-    // To display in UI, we need to get the date parts from the original 'now'
-    // and just set the time according to IST hours/minutes.
-    // A simpler way for the UI is just to use the browser's local time and let the server timestamp handle it if blank.
-    // But per request, let's set it to IST.
-    
     const nowInIST = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
 
     setNewVideoDate(nowInIST);
@@ -76,7 +65,6 @@ export default function AdminPage() {
     setSelectedCreatorForNewVideo(''); // Reset creator selection
     setCreatorsForTech([]); // Immediately clear old creators
 
-    // Defer the update to allow React to process state changes
     setTimeout(() => {
         const tech = technologies.find(t => t.id === techId);
         setCreatorsForTech(tech ? tech.creators : []);
@@ -217,7 +205,7 @@ export default function AdminPage() {
                 videoTitle: row.VideoTitle,
                 duration: row.Duration,
                 url: row.URL,
-                creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
+                creationDate: row.CreationDate ? new Date((row.CreationDate - (25567 + 2)) * 86400 * 1000) : undefined,
             }));
 
             await addBulkData(bulkData, (progress) => {
@@ -231,7 +219,6 @@ export default function AdminPage() {
         } finally {
             setIsUploading(false);
             setExcelFile(null);
-            // Clear the file input visually
             const fileInput = document.getElementById('excel-upload') as HTMLInputElement;
             if(fileInput) fileInput.value = '';
             setTimeout(() => setUploadProgress(0), 2000); // Hide progress bar after 2s
@@ -262,7 +249,6 @@ export default function AdminPage() {
         toast({ variant: 'destructive', title: "Error", description: "Failed to delete content." });
         console.error("Deletion failed:", error);
     } finally {
-        // Reset all states after deletion
         setDeleteType('');
         setSelectedTechForDelete('');
         setSelectedCreatorForDelete('');
@@ -318,14 +304,12 @@ export default function AdminPage() {
       </div>
 
       <div className="grid gap-8">
-        {/* Add Section */}
         <Card>
             <CardHeader>
                 <CardTitle>Add Content</CardTitle>
                 <CardDescription>Expand the learning galaxy with new topics, creators, and videos.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-8 md:grid-cols-1 lg:grid-cols-3">
-                {/* Add Technology Card */}
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="text-lg">Add New Technology</CardTitle>
@@ -348,7 +332,6 @@ export default function AdminPage() {
                     </div>
                 </Card>
 
-                {/* Add Creator Card */}
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="text-lg">Add New Creator</CardTitle>
@@ -380,7 +363,6 @@ export default function AdminPage() {
                     </div>
                 </Card>
 
-                {/* Add Video Card */}
                 <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="text-lg">Add New Video</CardTitle>
@@ -486,7 +468,6 @@ export default function AdminPage() {
             </CardContent>
         </Card>
 
-        {/* Bulk Upload Section */}
         <Card>
             <CardHeader>
                 <CardTitle>Bulk Upload Content</CardTitle>
@@ -530,7 +511,6 @@ export default function AdminPage() {
         </Card>
 
 
-        {/* Delete Section */}
         <Card>
             <CardHeader>
                 <CardTitle>Delete Content</CardTitle>

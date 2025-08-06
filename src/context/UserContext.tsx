@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, where } from 'firebase/firestore';
@@ -41,7 +41,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   
-  const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [rawTechnologies, setRawTechnologies] = useState<Technology[]>([]);
+  const [userStatuses, setUserStatuses] = useState<Record<string, Video['status']>>({});
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
@@ -58,109 +59,71 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => authUnsubscribe();
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     if (!user) {
-        setTechnologies([]);
+        setRawTechnologies([]);
+        setUserStatuses({});
         setDataLoading(false);
-        return;
+        return () => {};
     }
 
     setDataLoading(true);
+    const techQuery = query(collection(db, 'technologies'));
+    const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
+        const techsFromDB = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+            const techData = { id: techDoc.id, ...techDoc.data() } as Technology;
+            techData.creators = [];
 
-    let technologyUnsubscribe: Unsubscribe;
-    let creatorUnsubscribes: Unsubscribe[] = [];
-    let videoUnsubscribes: Unsubscribe[] = [];
-    let statusUnsubscribe: Unsubscribe;
-
-    const unsubAll = () => {
-        if (technologyUnsubscribe) technologyUnsubscribe();
-        creatorUnsubscribes.forEach(unsub => unsub());
-        videoUnsubscribes.forEach(unsub => unsub());
-        if (statusUnsubscribe) statusUnsubscribe();
-    };
-
-    const fetchAllData = () => {
-        unsubAll(); // Unsubscribe from previous listeners
-
-        // 1. Listen to video statuses first
-        const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
-        statusUnsubscribe = onSnapshot(statusesRef, (statusSnapshot) => {
-            const userStatuses: Record<string, Video['status']> = {};
-            statusSnapshot.docs.forEach(doc => {
-                userStatuses[doc.id] = doc.data().status;
-            });
-
-            // 2. Listen to technologies
-            const techQuery = query(collection(db, 'technologies'));
-            technologyUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
-                const techsFromDB: Technology[] = techSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), creators: [] } as Technology));
+            const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
+            const creatorsSnapshot = await getDocs(creatorsQuery);
+            techData.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
+                const creatorData = { id: creatorDoc.id, ...creatorDoc.data() } as Creator;
                 
-                let creatorsCompleted = 0;
-                if (techsFromDB.length === 0) {
-                    setTechnologies([]);
-                    setDataLoading(false);
-                    return;
-                }
+                const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
+                const videosSnapshot = await getDocs(videosQuery);
+                creatorData.videos = videosSnapshot.docs.map(videoDoc => ({
+                    id: videoDoc.id,
+                    ...videoDoc.data(),
+                    status: 'Not Started' // Default status
+                } as Video));
+                return creatorData;
+            }));
+            return techData;
+        }));
+        setRawTechnologies(techsFromDB);
+        setDataLoading(false);
+    });
 
-                const allCreators: Creator[][] = [];
-
-                techsFromDB.forEach((tech, techIndex) => {
-                    const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
-                    const creatorUnsub = onSnapshot(creatorsQuery, (creatorSnapshot) => {
-                        const creatorsFromDB: Creator[] = creatorSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), videos: [] } as Creator));
-                        allCreators[techIndex] = creatorsFromDB;
-
-                        let videosCompleted = 0;
-                        if (creatorsFromDB.length === 0) {
-                             creatorsCompleted++;
-                             if (creatorsCompleted === techsFromDB.length) {
-                                setTechnologies(techsFromDB.map((t, i) => ({...t, creators: allCreators[i] || []})))
-                                setDataLoading(false);
-                             }
-                             return;
-                        }
-                        
-                        const allVideos: Video[][] = [];
-                        
-                        creatorsFromDB.forEach((creator, creatorIndex) => {
-                             const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
-                             const videoUnsub = onSnapshot(videosQuery, (videoSnapshot) => {
-                                const videosFromDB: Video[] = videoSnapshot.docs.map(doc => ({
-                                    id: doc.id,
-                                    ...doc.data(),
-                                    status: userStatuses[doc.id] || 'Not Started'
-                                } as Video));
-                                
-                                allVideos[creatorIndex] = videosFromDB;
-                                videosCompleted++;
-                                
-                                if (videosCompleted === creatorsFromDB.length) {
-                                    creatorsFromDB.forEach((c, i) => c.videos = allVideos[i] || []);
-                                    creatorsCompleted++;
-                                    
-                                    if (creatorsCompleted === techsFromDB.length) {
-                                        techsFromDB.forEach((t, i) => t.creators = allCreators[i] || []);
-                                        setTechnologies(techsFromDB);
-                                        setDataLoading(false);
-                                    }
-                                }
-                             });
-                             videoUnsubscribes.push(videoUnsub);
-                        });
-                    });
-                    creatorUnsubscribes.push(creatorUnsub);
-                });
-            });
+    const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
+    const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
+        const statuses: Record<string, Video['status']> = {};
+        statusSnapshot.forEach((doc) => {
+            statuses[doc.id] = doc.data().status;
         });
-    };
-
-    fetchAllData();
+        setUserStatuses(statuses);
+    });
 
     return () => {
-        unsubAll();
+        techUnsubscribe();
+        statusUnsubscribe();
     };
+}, [user]);
 
-  }, [user]);
+  const technologies = useMemo(() => {
+    if (!rawTechnologies || rawTechnologies.length === 0) return [];
+
+    return rawTechnologies.map(tech => ({
+        ...tech,
+        creators: tech.creators.map(creator => ({
+            ...creator,
+            videos: creator.videos.map(video => ({
+                ...video,
+                status: userStatuses[video.id] || 'Not Started'
+            }))
+        }))
+    }));
+  }, [rawTechnologies, userStatuses]);
+
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();

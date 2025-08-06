@@ -194,7 +194,7 @@ export default function AdminPage() {
     reader.onload = async (e) => {
         try {
             const data = e.target?.result;
-            const workbook = XLSX.read(data, { type: 'binary' });
+            const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const json = XLSX.utils.sheet_to_json(worksheet);
@@ -205,7 +205,7 @@ export default function AdminPage() {
                 videoTitle: row.VideoTitle,
                 duration: row.Duration,
                 url: row.URL,
-                creationDate: row.CreationDate ? new Date((row.CreationDate - (25567 + 2)) * 86400 * 1000) : undefined,
+                creationDate: row.CreationDate ? new Date(row.CreationDate) : undefined,
             }));
 
             await addBulkData(bulkData, (progress) => {
@@ -473,7 +473,7 @@ export default function AdminPage() {
                 <CardTitle>Bulk Upload Content</CardTitle>
                 <CardDescription>
                     Add multiple videos at once by uploading an Excel file.
-                    The file must have columns: Technology, Creator, VideoTitle, Duration, URL, CreationDate (optional).
+                    The file must have columns: Technology, Creator, VideoTitle, Duration, URL, CreationDate (optional, as a date type cell).
                 </CardDescription>
             </CardHeader>
             <CardContent>

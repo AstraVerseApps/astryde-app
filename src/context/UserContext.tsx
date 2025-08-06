@@ -195,12 +195,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addBulkData = async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
-    for (let i = 0; i < data.length; i++) {
-        const item = data[i];
-
+    let i = 0;
+    for (const item of data) {
         if (!item.technology || !item.creator || !item.videoTitle || !item.duration || !item.url) {
             console.warn('Skipping row due to missing required fields:', item);
-            onProgress(((i + 1) / data.length) * 100);
+            i++;
+            onProgress((i / data.length) * 100);
             continue;
         }
 
@@ -229,8 +229,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         } catch (error) {
             console.error("Error processing row:", item, "Error:", error);
         }
-
-        onProgress(((i + 1) / data.length) * 100);
+        
+        i++;
+        onProgress((i / data.length) * 100);
     }
   };
 

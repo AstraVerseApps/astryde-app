@@ -60,12 +60,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => authUnsubscribe();
   }, []);
 
- useEffect(() => {
+  useEffect(() => {
     if (!user) {
         setRawTechnologies([]);
         setUserStatuses({});
         setDataLoading(false);
-        return () => {};
+        return;
     }
 
     setDataLoading(true);
@@ -73,10 +73,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     const techQuery = query(collection(db, 'technologies'));
     const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
+        if (!isMounted) return;
         const techsFromDB = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
             const techData = { id: techDoc.id, ...techDoc.data() } as Technology;
-            techData.creators = [];
-
+            
             const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
             const creatorsSnapshot = await getDocs(creatorsQuery);
             techData.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
@@ -92,6 +92,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             }));
             return techData;
         }));
+        
         if (isMounted) {
             setRawTechnologies(techsFromDB);
             setDataLoading(false);
@@ -100,6 +101,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
     const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
+        if (!isMounted) return;
         const statuses: Record<string, Video['status']> = {};
         statusSnapshot.forEach((doc) => {
             statuses[doc.id] = doc.data().status;
@@ -114,27 +116,25 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         techUnsubscribe();
         statusUnsubscribe();
     };
-}, [user]);
+  }, [user]);
 
   useEffect(() => {
-      if (!rawTechnologies.length && !dataLoading) {
-          setTechnologies([]);
-          return;
-      }
-      
-      // Create a new array to ensure React detects the change.
-      const newTechnologies = rawTechnologies.map(tech => ({
-          ...tech,
-          creators: tech.creators.map(creator => ({
-              ...creator,
-              videos: creator.videos.map(video => ({
-                  ...video,
-                  status: userStatuses[video.id] || 'Not Started'
-              }))
-          }))
-      }));
-      setTechnologies(newTechnologies);
+    if (dataLoading) {
+      setTechnologies([]);
+      return;
+    }
+    // Deep clone to ensure child components re-render
+    const newTechnologies = JSON.parse(JSON.stringify(rawTechnologies)) as Technology[];
+    
+    newTechnologies.forEach(tech => {
+      tech.creators.forEach(creator => {
+        creator.videos.forEach(video => {
+          video.status = userStatuses[video.id] || 'Not Started';
+        });
+      });
+    });
 
+    setTechnologies(newTechnologies);
   }, [rawTechnologies, userStatuses, dataLoading]);
 
 
@@ -295,7 +295,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
     
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();

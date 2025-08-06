@@ -191,10 +191,10 @@ export default function AdminPage() {
     setUploadProgress(0);
     
     try {
-        const reader = new FileReader();
-        reader.readAsArrayBuffer(excelFile);
-
         await new Promise<void>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(excelFile);
+
             reader.onload = async (e) => {
                 try {
                     const data = e.target?.result;
@@ -653,3 +653,4 @@ export default function AdminPage() {
     
 
     
+

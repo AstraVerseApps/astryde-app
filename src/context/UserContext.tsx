@@ -62,9 +62,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (!user) {
         setTechnologies([]);
         setUserStatuses({});
+        setLoading(false);
         return;
     }
 
+    setLoading(true);
     const statusesRef = collection(db, `users/${user.uid}/videoStatuses`);
     const statusesUnsubscribe = onSnapshot(statusesRef, (snapshot) => {
         const newStatuses: Record<string, Video['status']> = {};
@@ -75,46 +77,14 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     });
 
     const techQuery = query(collection(db, 'technologies'));
-    const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-        setLoading(true);
-        const techs = await Promise.all(
-            techSnapshot.docs.map(async (techDoc) => {
-                const creatorsSnapshot = await getDocs(
-                    query(collection(db, `technologies/${techDoc.id}/creators`))
-                );
-                const creators = await Promise.all(
-                    creatorsSnapshot.docs.map(async (creatorDoc) => {
-                        const videosSnapshot = await getDocs(
-                            query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"))
-                        );
-                        const videos = videosSnapshot.docs.map(videoDoc => {
-                            const data = videoDoc.data();
-                            return {
-                                id: videoDoc.id,
-                                title: data.title,
-                                duration: data.duration,
-                                url: data.url,
-                                status: 'Not Started', 
-                                createdAt: data.createdAt
-                            };
-                        });
-                        return {
-                            id: creatorDoc.id,
-                            name: creatorDoc.data().name,
-                            avatar: creatorDoc.data().avatar,
-                            videos
-                        };
-                    })
-                );
-                return {
-                    id: techDoc.id,
-                    name: techDoc.data().name,
-                    description: techDoc.data().description,
-                    creators
-                };
-            })
-        );
-        setTechnologies(techs);
+    const techUnsubscribe = onSnapshot(techQuery, (techSnapshot) => {
+        const techsFromDB = techSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data() as Omit<Technology, 'id' | 'creators'>,
+            creators: [] // Initialize creators, will be populated by sub-collection listeners
+        }));
+
+        setTechnologies(techsFromDB);
         setLoading(false);
     });
 
@@ -123,6 +93,56 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         techUnsubscribe();
     };
 }, [user]);
+
+useEffect(() => {
+    if (!technologies.length) return;
+
+    const allUnsubscribes: Unsubscribe[] = [];
+
+    technologies.forEach((tech) => {
+        const creatorsQuery = query(collection(db, `technologies/${tech.id}/creators`));
+        const creatorsUnsubscribe = onSnapshot(creatorsQuery, (creatorSnapshot) => {
+            const creatorsFromDB = creatorSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data() as Omit<Creator, 'id' | 'videos'>,
+                videos: [] // Initialize videos
+            }));
+
+            setTechnologies(currentTechs =>
+                currentTechs.map(t => t.id === tech.id ? { ...t, creators: creatorsFromDB } : t)
+            );
+
+            creatorsFromDB.forEach(creator => {
+                const videosQuery = query(collection(db, `technologies/${tech.id}/creators/${creator.id}/videos`), orderBy("createdAt", "asc"));
+                const videosUnsubscribe = onSnapshot(videosQuery, videoSnapshot => {
+                    const videosFromDB = videoSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data() as Omit<Video, 'id' | 'status'>,
+                    }));
+                    
+                    setTechnologies(currentTechs =>
+                      currentTechs.map(t =>
+                        t.id === tech.id
+                          ? {
+                              ...t,
+                              creators: t.creators.map(c =>
+                                c.id === creator.id ? { ...c, videos: videosFromDB } : c
+                              ),
+                            }
+                          : t
+                      )
+                    );
+                });
+                allUnsubscribes.push(videosUnsubscribe);
+            });
+        });
+        allUnsubscribes.push(creatorsUnsubscribe);
+    });
+
+    return () => {
+        allUnsubscribes.forEach(unsub => unsub());
+    };
+}, [technologies.map(t => t.id).join(',')]); // Rerun if technologies list changes
 
 
   const processedTechnologies = useMemo(() => {
@@ -234,8 +254,17 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 url: item.url,
             };
 
-            if (item.creationDate instanceof Date && !isNaN(item.creationDate.getTime())) {
-                videoData.createdAt = Timestamp.fromDate(item.creationDate);
+            // Handling Excel date which can be a number or a string.
+            // Using a more robust check for a valid date.
+            let creationTimestamp: Timestamp | null = null;
+            if (item.creationDate) {
+                const date = new Date(item.creationDate);
+                if (!isNaN(date.getTime())) {
+                    creationTimestamp = Timestamp.fromDate(date);
+                }
+            }
+            if (creationTimestamp) {
+                videoData.createdAt = creationTimestamp;
             }
 
             // Add video
@@ -316,5 +345,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

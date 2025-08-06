@@ -191,7 +191,7 @@ export default function AdminPage() {
     setUploadProgress(0);
     
     try {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsArrayBuffer(excelFile);
 
@@ -204,6 +204,16 @@ export default function AdminPage() {
                     const workbook = XLSX.read(data, { type: 'buffer', cellDates: true });
                     const sheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[sheetName];
+                    
+                    // Header Validation
+                    const requiredHeaders = ['Technology', 'Creator', 'VideoTitle', 'Duration', 'URL'];
+                    const headerRow = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as string[];
+                    const missingHeaders = requiredHeaders.filter(h => !headerRow.includes(h));
+
+                    if (missingHeaders.length > 0) {
+                        return reject(new Error(`Missing required columns: ${missingHeaders.join(', ')}`));
+                    }
+                    
                     const json = XLSX.utils.sheet_to_json(worksheet);
                     
                     console.log("--- Excel Data Read ---");
@@ -224,8 +234,8 @@ export default function AdminPage() {
                     //     setUploadProgress(progress);
                     // });
 
-                    toast({ title: 'Data Read', description: 'Check the browser console to see the parsed data.' });
-                    resolve();
+                    toast({ title: 'Data Read Successfully', description: 'Check the browser console to see the parsed data.' });
+                    resolve(null);
                 } catch (err) {
                     reject(err);
                 }
@@ -236,9 +246,13 @@ export default function AdminPage() {
             }
         });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to process Excel file:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not process the Excel file. Make sure the format is correct.' });
+        toast({ 
+            variant: 'destructive', 
+            title: 'Upload Error', 
+            description: error.message || 'Could not process the Excel file. Make sure the format is correct.' 
+        });
     } finally {
         setIsUploading(false);
         setExcelFile(null);
@@ -661,5 +675,7 @@ export default function AdminPage() {
 
 
 
+
+    
 
     

@@ -13,7 +13,10 @@ import { Send } from 'lucide-react';
 export default function ContactPage() {
   const [inquiryType, setInquiryType] = useState('query');
   const [message, setMessage] = useState('');
-  const [email, setEmail] = useState('');
+  
+  // State for new playlist
+  const [technologyName, setTechnologyName] = useState('');
+  const [creatorName, setCreatorName] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
   const [optionalMessage, setOptionalMessage] = useState('');
 
@@ -34,14 +37,14 @@ export default function ContactPage() {
   const getBody = () => {
     let bodyContent = '';
     if (inquiryType === 'playlist') {
-        bodyContent = `Playlist URL: ${playlistUrl}`;
+        bodyContent = `Technology: ${technologyName}\nCreator: ${creatorName}\nPlaylist URL: ${playlistUrl}`;
         if (optionalMessage) {
             bodyContent += `\n\nMessage: \n${optionalMessage}`;
         }
     } else {
         bodyContent = `Message: \n${message}`;
     }
-    return encodeURIComponent(`${bodyContent}\n\nFrom: ${email}`);
+    return encodeURIComponent(bodyContent);
   }
 
   return (
@@ -83,6 +86,24 @@ export default function ContactPage() {
                         {inquiryType === 'playlist' ? (
                             <>
                                 <div className="space-y-2">
+                                    <Label htmlFor="technology-name">Technology Name</Label>
+                                    <Input 
+                                        id="technology-name" 
+                                        placeholder="e.g. Next.js"
+                                        value={technologyName}
+                                        onChange={(e) => setTechnologyName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="creator-name">Creator Name</Label>
+                                    <Input 
+                                        id="creator-name" 
+                                        placeholder="e.g. Code with Astro"
+                                        value={creatorName}
+                                        onChange={(e) => setCreatorName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
                                     <Label htmlFor="playlist-url">Playlist URL</Label>
                                     <Input 
                                         id="playlist-url" 
@@ -114,17 +135,6 @@ export default function ContactPage() {
                                 />
                             </div>
                         )}
-
-                         <div className="space-y-2">
-                            <Label htmlFor="email">Your Email Address</Label>
-                            <Input 
-                                id="email" 
-                                type="email" 
-                                placeholder="you@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                        </div>
                         
                         <Button asChild className="w-full" size="lg">
                             <a href={`mailto:astrydeapp@gmail.com?subject=${getSubject()}&body=${getBody()}`}>

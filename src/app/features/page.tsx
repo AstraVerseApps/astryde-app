@@ -79,7 +79,7 @@ export default function FeaturesPage() {
             We're always looking to improve. If you have a suggestion for a new feature, a course you'd like to see, or a creator playlist to add, please let us know!
           </p>
           <Button asChild size="lg" className="mt-8">
-            <Link href="/">Contact Us</Link>
+            <Link href="/contact">Contact Us</Link>
           </Button>
         </div>
       </section>

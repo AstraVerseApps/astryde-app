@@ -172,7 +172,7 @@ export default function ProgressPage() {
 
       {view === 'videos' && selectedCreator && selectedTech && (
           <div className="space-y-4">
-            {selectedCreator.videos.map(video => (
+            {selectedCreator.videos.length > 0 ? selectedCreator.videos.map(video => (
                 <Dialog key={video.id}>
                     <Card className={cn(
                         "flex flex-col md:flex-row items-center justify-between p-4 group transition-all",
@@ -220,7 +220,11 @@ export default function ProgressPage() {
                         </div>
                     </DialogContent>
                 </Dialog>
-            ))}
+            )) : (
+                 <div className="text-center text-muted-foreground py-12">
+                    <p>No videos in progress for this creator.</p>
+                </div>
+            )}
             </div>
       )}
     </>

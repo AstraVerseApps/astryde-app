@@ -42,7 +42,7 @@ export default function CoursesLayout({
   
 
   React.useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && user) {
       router.push('/');
     }
   }, [user, loading, router]);
@@ -219,3 +219,6 @@ export default function CoursesLayout({
     </div>
   );
 }
+
+
+    

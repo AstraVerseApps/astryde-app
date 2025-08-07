@@ -14,18 +14,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useUser } from '@/context/UserContext';
 import {
   Home,
   LineChart,
   Menu,
-  Search,
   Settings,
   User,
   Shield,
   LogOut,
+  ListChecks,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -85,6 +84,13 @@ export default function CoursesLayout({
                 Courses
               </Link>
               <Link
+                href="/courses/progress"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
+              >
+                <ListChecks className="h-4 w-4" />
+                Progress
+              </Link>
+              <Link
                 href="/courses/analytics"
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
               >
@@ -132,6 +138,13 @@ export default function CoursesLayout({
                 >
                   <Home className="h-5 w-5" />
                   Courses
+                </Link>
+                 <Link
+                  href="/courses/progress"
+                  className="mx-[-0.65rem] flex items-center gap-4 rounded-xl px-3 py-2 text-muted-foreground hover:text-foreground"
+                >
+                  <ListChecks className="h-5 w-5" />
+                  Progress
                 </Link>
                 <Link
                   href="/courses/analytics"

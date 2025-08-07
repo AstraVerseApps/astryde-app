@@ -41,8 +41,8 @@ export default function Header() {
   const navLinks = [
     { href: '/about', text: 'About' },
     { href: '/features', text: 'Features' },
-    { href: '/contact', text: 'Contact' },
-    { href: '/', text: 'Contribute' },
+    { href: '/faq', text: 'FAQ' },
+    { href: '/contact', text: 'Contact Us' },
   ];
 
   if (pathname === '/') {

@@ -64,7 +64,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.push('/dashboard');
+      router.push('/courses');
     }
   }, [user, loading, router]);
   

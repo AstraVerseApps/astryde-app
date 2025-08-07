@@ -32,7 +32,6 @@ interface UserContextType {
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
   addBulkData: (data: BulkDataItem[], onProgress: (progress: number) => void) => Promise<void>;
-  toggleCreatorStar: (techId: string, creatorId: string) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -42,7 +41,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
-  const [starredCreators, setStarredCreators] = useState<Record<string, boolean>>({});
   
   const [publicTechnologies, setPublicTechnologies] = useState<Technology[]>([]);
   
@@ -75,8 +73,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }));
         
         setPublicTechnologies(technologiesData);
-        setTechnologies(technologiesData); 
-        setLoading(false);
+        if (!auth.currentUser) {
+            setTechnologies(technologiesData);
+            setLoading(false);
+        }
     });
 
     return () => unsubscribe();
@@ -84,61 +84,29 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
 
   useEffect(() => {
+    let statusUnsubscribe: Unsubscribe | undefined;
+    
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
        if (currentUser) {
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
-      } else {
-        setIsAdmin(false);
-      }
-    });
-    return () => authUnsubscribe();
-  }, []);
-
-  
-  useEffect(() => {
-    if (!user) {
-        setTechnologies(publicTechnologies.map(tech => ({
-            ...tech,
-            creators: tech.creators.map(creator => ({
-                ...creator,
-                isStarred: false,
-                videos: creator.videos.map(video => ({
-                    ...video,
-                    status: 'Not Started',
-                    completedAt: undefined,
-                }))
-            }))
-        })));
-        setStarredCreators({});
-        setLoading(false);
-        return;
-    }
-  
-    setLoading(true);
-    
-    const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
-    const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
-        const statuses: Record<string, { status: Video['status'], completedAt?: Timestamp }> = {};
-        statusSnapshot.forEach((doc) => {
-            statuses[doc.id] = {
-                status: doc.data().status,
-                completedAt: doc.data().completedAt,
-            };
-        });
-
-        const starredQuery = query(collection(db, `users/${user.uid}/starredCreators`));
-        const starredUnsubscribe = onSnapshot(starredQuery, (snapshot) => {
-            const newStarred: Record<string, boolean> = {};
-            snapshot.forEach(doc => { newStarred[doc.id] = true; });
-            setStarredCreators(newStarred);
+        
+        setLoading(true);
+        const statusQuery = query(collection(db, `users/${currentUser.uid}/videoStatuses`));
+        statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
+            const statuses: Record<string, { status: Video['status'], completedAt?: Timestamp }> = {};
+            statusSnapshot.forEach((doc) => {
+                statuses[doc.id] = {
+                    status: doc.data().status,
+                    completedAt: doc.data().completedAt,
+                };
+            });
 
             setTechnologies(publicTechnologies.map(tech => ({
                 ...tech,
                 creators: tech.creators.map(creator => ({
                     ...creator,
-                    isStarred: !!newStarred[`${tech.id}_${creator.id}`],
                     videos: creator.videos.map(video => ({
                         ...video,
                         status: statuses[video.id]?.status || 'Not Started',
@@ -147,17 +115,37 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                 }))
             })));
             setLoading(false);
+        }, (error) => {
+          console.error("Error in status listener:", error);
+          setLoading(false);
         });
 
-        return () => starredUnsubscribe();
-    }, (error) => {
-      console.error("Error in status listener:", error);
-      setLoading(false);
+      } else {
+        setIsAdmin(false);
+        if (statusUnsubscribe) {
+            statusUnsubscribe();
+        }
+        setTechnologies(publicTechnologies.map(tech => ({
+            ...tech,
+            creators: tech.creators.map(creator => ({
+                ...creator,
+                videos: creator.videos.map(video => ({
+                    ...video,
+                    status: 'Not Started',
+                    completedAt: undefined,
+                }))
+            }))
+        })));
+        setLoading(false);
+      }
     });
-
-    return () => statusUnsubscribe();
-
-  }, [user, publicTechnologies]);
+    return () => {
+        authUnsubscribe();
+        if (statusUnsubscribe) {
+            statusUnsubscribe();
+        }
+    };
+  }, [publicTechnologies]);
 
 
   const signInWithGoogle = async () => {
@@ -198,30 +186,15 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const toggleCreatorStar = async (techId: string, creatorId: string) => {
-    if (!user) return;
-    const starId = `${techId}_${creatorId}`;
-    const starRef = doc(db, `users/${user.uid}/starredCreators`, starId);
-    const isCurrentlyStarred = !!starredCreators[starId];
-
-    try {
-      if (isCurrentlyStarred) {
-        await deleteDoc(starRef);
-      } else {
-        await setDoc(starRef, { starredAt: serverTimestamp() });
-      }
-    } catch (error) {
-        console.error("Failed to toggle star:", error);
-    }
-  };
-
   const addTechnology = async (tech: Omit<Technology, 'id' | 'creators'>): Promise<string> => {
+    if (!isAdmin) throw new Error("Only admins can add technologies.");
     const { name, description } = tech;
     const docRef = await addDoc(collection(db, 'technologies'), { name, description });
     return docRef.id;
   };
 
   const addCreator = async (techId: string, creator: { name: string; }): Promise<string> => {
+    if (!isAdmin) throw new Error("Only admins can add creators.");
     if (!techId) throw new Error("Technology ID is required to add a creator.");
     
     const docRef = await addDoc(collection(db, `technologies/${techId}/creators`), {
@@ -232,6 +205,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addVideo = async (techId: string, creatorId: string, video: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp }) => {
+    if (!isAdmin) throw new Error("Only admins can add videos.");
     const { title, duration, url, createdAt } = video;
     const videoData: any = {
         title,
@@ -243,6 +217,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const findOrCreateDocument = async (collPath: string, fieldName: string, fieldValue: string, createData: any) => {
+    if (!isAdmin) return '';
     const q = query(collection(db, collPath), where(fieldName, "==", fieldValue));
     const querySnapshot = await getDocs(q);
 
@@ -255,6 +230,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addBulkData = useCallback(async (data: BulkDataItem[], onProgress: (progress: number) => void) => {
+    if (!isAdmin) throw new Error("Only admins can perform bulk uploads.");
     let i = 0;
     const techIdCache: Record<string, string> = {};
     const creatorIdCache: Record<string, string> = {};
@@ -266,7 +242,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           continue;
         }
 
-        // Find or create technology
         let techId = techIdCache[item.technology];
         if (!techId) {
           techId = await findOrCreateDocument('technologies', 'name', item.technology, {
@@ -276,7 +251,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           techIdCache[item.technology] = techId;
         }
 
-        // Find or create creator
         const creatorCacheKey = `${techId}_${item.creator}`;
         let creatorId = creatorIdCache[creatorCacheKey];
         if (!creatorId) {
@@ -287,7 +261,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           creatorIdCache[creatorCacheKey] = creatorId;
         }
 
-        // Prepare video data
         const videoData: Omit<Video, 'id' | 'status'> & { createdAt?: Timestamp } = {
           title: item.videoTitle,
           duration: item.duration,
@@ -316,10 +289,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         onProgress((i / data.length) * 100);
       }
     }
-  }, [addVideo]);
+  }, [isAdmin, addVideo]);
 
 
   const deleteSubcollection = async (batch: WriteBatch, collectionPath: string) => {
+    if (!isAdmin) return;
     const q = query(collection(db, collectionPath));
     const snapshot = await getDocs(q);
     snapshot.docs.forEach(doc => {
@@ -328,6 +302,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteTechnology = async (techId: string) => {
+    if (!isAdmin) throw new Error("Only admins can delete technologies.");
     const batch = writeBatch(db);
     const techDocRef = doc(db, 'technologies', techId);
 
@@ -342,16 +317,18 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteCreator = async (techId: string, creatorId: string) => {
+    if (!isAdmin) throw new Error("Only admins can delete creators.");
     const batch = writeBatch(db);
     const creatorDocRef = doc(db, `technologies/${techId}/creators`, creatorId);
     
-    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorDoc.id}/videos`);
+    await deleteSubcollection(batch, `technologies/${techId}/creators/${creatorId}/videos`);
 
     batch.delete(creatorDocRef);
     await batch.commit();
   };
 
   const deleteVideo = async (techId: string, creatorId: string, videoId: string) => {
+    if (!isAdmin) throw new Error("Only admins can delete videos.");
     await deleteDoc(doc(db, `technologies/${techId}/creators/${creatorId}/videos`, videoId));
   };
 
@@ -371,7 +348,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         deleteCreator,
         deleteVideo,
         addBulkData,
-        toggleCreatorStar
     }}>
       {children}
     </UserContext.Provider>

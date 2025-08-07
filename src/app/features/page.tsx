@@ -3,7 +3,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Compass, Target, TrendingUp, Users, Bot, ListChecks, Shield, Star, Flame, Search, MessageSquarePlus } from 'lucide-react';
+import { Check, Compass, Target, TrendingUp, Users, Bot, ListChecks, Shield, Star, Flame, Search, MessageSquarePlus, Moon, Video, Library, DollarSign, Focus } from 'lucide-react';
 import Link from 'next/link';
 
 const features = [
@@ -36,6 +36,31 @@ const features = [
     icon: <Search className="w-10 h-10 text-primary" />,
     title: 'Easy Navigation & Search',
     description: 'Quickly find the topics and creators that interest you with our built-in search functionality on the main courses page.',
+  },
+   {
+    icon: <Library className="w-10 h-10 text-primary" />,
+    title: 'Dedicated Progress View',
+    description: 'Focus on what matters. This dedicated page shows only the courses and creators you have started, starred, or not yet completed.',
+  },
+  {
+    icon: <Moon className="w-10 h-10 text-primary" />,
+    title: 'Light & Dark Mode',
+    description: 'Customize your learning environment. Switch between light and dark themes for comfortable viewing, day or night.',
+  },
+  {
+    icon: <MessageSquarePlus className="w-10 h-10 text-primary" />,
+    title: 'Content Contribution',
+    description: 'Help the galaxy grow! Use the contact form to suggest new technologies, creators, and video playlists to be added to the platform.',
+  },
+  {
+    icon: <Focus className="w-10 h-10 text-primary" />,
+    title: 'Focused Learning',
+    description: 'No more distractions from endless resources. Our structured paths provide a clear and concentrated way to learn and master new skills.',
+  },
+  {
+    icon: <DollarSign className="w-10 h-10 text-primary" />,
+    title: 'Completely Free',
+    description: 'Money should not come between you and knowledge. Astryde is, and always will be, completely free for everyone to use.',
   },
 ];
 

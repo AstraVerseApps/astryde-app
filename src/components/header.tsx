@@ -39,7 +39,7 @@ export default function Header() {
   const userDisplayName = user?.displayName || user?.email;
 
   const navLinks = [
-    { href: '/', text: 'About' },
+    { href: '/about', text: 'About' },
     { href: '/', text: 'Features' },
     { href: '/', text: 'Contact' },
     { href: '/', text: 'Contribute' },

@@ -85,13 +85,6 @@ export default function CoursesLayout({
                 Courses
               </Link>
               <Link
-                href="/courses/profile"
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
-              >
-                <User className="h-4 w-4" />
-                Profile
-              </Link>
-              <Link
                 href="/courses/analytics"
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
               >
@@ -139,13 +132,6 @@ export default function CoursesLayout({
                 >
                   <Home className="h-5 w-5" />
                   Courses
-                </Link>
-                <Link
-                  href="/courses/profile"
-                  className="mx-[-0.65rem] flex items-center gap-4 rounded-xl px-3 py-2 text-muted-foreground hover:text-foreground"
-                >
-                  <User className="h-5 w-5" />
-                  Profile
                 </Link>
                 <Link
                   href="/courses/analytics"

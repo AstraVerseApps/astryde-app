@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, writeBatch, deleteDoc, setDoc, addDoc, getDocs, query, Unsubscribe, serverTimestamp, orderBy, Timestamp, where } from 'firebase/firestore';
@@ -40,12 +40,14 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [starredCreators, setStarredCreators] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    setLoading(true);
+    let unsubscribe: Unsubscribe | null = null;
+  
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -53,111 +55,118 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
       } else {
         setIsAdmin(false);
-        setStarredCreators({}); // Clear starred creators on logout
+        setStarredCreators({});
       }
-      setAuthLoading(false);
+      setLoading(false);
     });
-    return () => authUnsubscribe();
+  
+    return () => {
+      authUnsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   useEffect(() => {
-    let unsubscribes: Unsubscribe[] = [];
-
-    const fetchPublicData = () => {
-        setDataLoading(true);
-        const techQuery = query(collection(db, 'technologies'));
-        const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-            const publicTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
-                const techData = { id: techDoc.id, ...techDoc.data(), creators: [] } as Technology;
+    // This effect fetches all public course data.
+    const techQuery = query(collection(db, 'technologies'), orderBy('name'));
+    const unsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
+        const publicTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+            const techData = { id: techDoc.id, ...techDoc.data(), creators: [] } as Technology;
+            
+            const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`), orderBy('name'));
+            const creatorsSnapshot = await getDocs(creatorsQuery);
+            techData.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
+                const creatorData = { id: creatorDoc.id, ...creatorDoc.data(), videos: [] } as Creator;
                 
-                const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
-                const creatorsSnapshot = await getDocs(creatorsQuery);
-                techData.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
-                    const creatorData = { id: creatorDoc.id, ...creatorDoc.data(), videos: [] } as Creator;
-                    
-                    const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
-                    const videosSnapshot = await getDocs(videosQuery);
-                    creatorData.videos = videosSnapshot.docs.map(videoDoc => {
-                        const videoData = videoDoc.data();
-                        return {
-                            id: videoDoc.id,
-                            ...videoData,
-                            status: 'Not Started',
-                            completedAt: videoData.completedAt,
-                        } as Video;
-                    });
-                    return creatorData;
-                }));
-                return techData;
+                const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
+                const videosSnapshot = await getDocs(videosQuery);
+                creatorData.videos = videosSnapshot.docs.map(videoDoc => {
+                    const videoData = videoDoc.data();
+                    return {
+                        id: videoDoc.id,
+                        ...videoData,
+                        status: 'Not Started',
+                        completedAt: videoData.completedAt,
+                    } as Video;
+                });
+                return creatorData;
             }));
-
-            if (user) {
-                // If user is logged in, fetch their data and then merge
-                fetchAndMergeUserData(publicTechnologies);
-            } else {
-                // If no user, just set the public data
-                setTechnologies(publicTechnologies);
-                setDataLoading(false);
-            }
-        });
-        unsubscribes.push(techUnsubscribe);
-    };
-
-    const fetchAndMergeUserData = (publicTechnologies: Technology[]) => {
-        if (!user) return;
+            return techData;
+        }));
         
-        const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
-        const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
-            const statuses: Record<string, { status: Video['status'], completedAt?: Timestamp }> = {};
-            statusSnapshot.forEach((doc) => {
-                statuses[doc.id] = {
-                    status: doc.data().status,
-                    completedAt: doc.data().completedAt,
-                };
-            });
+        // Temporarily set the public data. If a user is logged in, it will be updated with their progress.
+        setTechnologies(publicTechnologies);
+        setDataLoading(false);
+    });
 
-            const newTechnologies = publicTechnologies.map(tech => ({
+    return () => unsubscribe();
+  }, []);
+
+
+  useEffect(() => {
+    // This effect merges user-specific data if a user is logged in.
+    if (!user) {
+        // If user logs out, we need to reset their progress in the state.
+        setTechnologies(prev => prev.map(tech => ({
+            ...tech,
+            creators: tech.creators.map(creator => ({
+                ...creator,
+                isStarred: false,
+                videos: creator.videos.map(video => ({
+                    ...video,
+                    status: 'Not Started',
+                    completedAt: undefined,
+                }))
+            }))
+        })));
+        setStarredCreators({});
+        return;
+    }
+
+    setDataLoading(true);
+
+    const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
+    const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
+        const statuses: Record<string, { status: Video['status'], completedAt?: Timestamp }> = {};
+        statusSnapshot.forEach((doc) => {
+            statuses[doc.id] = {
+                status: doc.data().status,
+                completedAt: doc.data().completedAt,
+            };
+        });
+
+        const starredQuery = query(collection(db, `users/${user.uid}/starredCreators`));
+        const starredUnsubscribe = onSnapshot(starredQuery, (snapshot) => {
+            const newStarred: Record<string, boolean> = {};
+            snapshot.forEach(doc => { newStarred[doc.id] = true; });
+            setStarredCreators(newStarred);
+
+            // Merge all user data with the existing public technology data
+            setTechnologies(prev => prev.map(tech => ({
                 ...tech,
                 creators: tech.creators.map(creator => ({
                     ...creator,
+                    isStarred: !!newStarred[`${tech.id}_${creator.id}`],
                     videos: creator.videos.map(video => ({
                         ...video,
                         status: statuses[video.id]?.status || 'Not Started',
                         completedAt: statuses[video.id]?.completedAt,
                     }))
                 }))
-            }));
-            
-            // This is where starred creators listener should also be
-            const starredQuery = query(collection(db, `users/${user.uid}/starredCreators`));
-            const starredUnsubscribe = onSnapshot(starredQuery, (snapshot) => {
-                const newStarred: Record<string, boolean> = {};
-                snapshot.forEach(doc => { newStarred[doc.id] = true; });
-                setStarredCreators(newStarred);
-
-                // Now combine starred status into the final object
-                const finalTechnologies = newTechnologies.map(tech => ({
-                    ...tech,
-                    creators: tech.creators.map(creator => ({
-                        ...creator,
-                        isStarred: !!newStarred[`${tech.id}_${creator.id}`]
-                    }))
-                }));
-
-                setTechnologies(finalTechnologies);
-                setDataLoading(false);
-            });
-            unsubscribes.push(starredUnsubscribe);
+            })));
+            setDataLoading(false);
         });
-        unsubscribes.push(statusUnsubscribe);
-    };
 
-    fetchPublicData();
+        // Return cleanup for starred creators listener
+        return () => starredUnsubscribe();
+    });
 
-    return () => {
-        unsubscribes.forEach(unsub => unsub());
-    };
-  }, [user]);
+    // Return cleanup for video status listener
+    return () => statusUnsubscribe();
+
+}, [user]);
 
 
   const signInWithGoogle = async () => {
@@ -181,10 +190,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
-        const dataToSet: { status: string; techId: string; creatorId: string; completedAt?: Timestamp } = { 
+        const dataToSet: { status: string; techId: string; creatorId: string; completedAt?: Timestamp | null} = { 
             status,
             techId,
-            creatorId 
+            creatorId,
+            completedAt: null
         };
         if (status === 'Completed') {
             dataToSet.completedAt = Timestamp.now();
@@ -358,7 +368,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         user,
         isAdmin,
         technologies,
-        loading: authLoading || dataLoading,
+        loading,
         signInWithGoogle,
         logout,
         updateVideoStatus,

@@ -2,33 +2,20 @@
 "use client";
 
 import { AstrydeLogo } from '@/components/icons';
-import { ThemeToggle } from '@/components/theme-toggle';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useUser } from '@/context/UserContext';
+import Header from '@/components/header';
 import {
   Home,
   LineChart,
   Menu,
-  Settings,
-  User,
   Shield,
-  LogOut,
   ListChecks,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
+import { useUser } from '@/context/UserContext';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 
 export default function CoursesLayout({
@@ -36,7 +23,7 @@ export default function CoursesLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isAdmin, logout, loading } = useUser();
+  const { user, isAdmin, loading } = useUser();
   const router = useRouter();
   
 
@@ -54,23 +41,14 @@ export default function CoursesLayout({
     )
   }
 
-  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
-  const userAvatar = user?.photoURL;
-  const userDisplayName = user?.displayName || user?.email;
-
-
-  const handleLogout = async () => {
-    await logout();
-    router.push('/');
-  }
-
-
   return (
+    <>
+    <Header />
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
       <div className="hidden border-r bg-muted/40 md:block">
         <div className="flex h-full max-h-screen flex-col gap-2">
           <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
+            <Link href="/courses" className="flex items-center gap-2 font-semibold">
               <AstrydeLogo />
             </Link>
           </div>
@@ -127,7 +105,7 @@ export default function CoursesLayout({
             <SheetContent side="left" className="flex flex-col">
               <nav className="grid gap-2 text-lg font-medium">
                 <Link
-                  href="#"
+                  href="/courses"
                   className="flex items-center gap-2 text-lg font-semibold"
                 >
                   <AstrydeLogo />
@@ -168,44 +146,12 @@ export default function CoursesLayout({
           <div className="w-full flex-1">
             {/* The search bar is removed from here and will be managed in the page component */}
           </div>
-          <ThemeToggle />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="icon" className="rounded-full">
-                <Avatar>
-                  <AvatarImage src={userAvatar || `https://placehold.co/100x100/BFDBFE/1E3A8A/png?text=${userInitial}`} />
-                  <AvatarFallback>{userInitial}</AvatarFallback>
-                </Avatar>
-                <span className="sr-only">Toggle user menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel className="break-all">{userDisplayName}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <Link href="/courses/profile">
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Logout</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
           {children}
         </main>
       </div>
     </div>
+    </>
   );
 }

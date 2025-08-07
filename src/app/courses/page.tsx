@@ -41,6 +41,7 @@ export default function CoursesPage() {
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [creatorSearchTerm, setCreatorSearchTerm] = useState('');
 
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
@@ -52,6 +53,7 @@ export default function CoursesPage() {
   const handleTechClick = (tech: Technology) => {
     setSelectedTech(tech);
     setView('creators');
+    setCreatorSearchTerm('');
   }
 
   const handleCreatorClick = (creator: Creator) => {
@@ -66,6 +68,7 @@ export default function CoursesPage() {
     } else if (view === 'creators') {
       setView('technologies');
       setSelectedTech(null);
+      setSearchTerm('');
     }
   }
 
@@ -77,6 +80,16 @@ export default function CoursesPage() {
       tech.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [technologies, searchTerm]);
+
+  const filteredCreators = useMemo(() => {
+    if (!selectedTech) return [];
+    if (!creatorSearchTerm) {
+      return selectedTech.creators;
+    }
+    return selectedTech.creators.filter(creator =>
+      creator.name.toLowerCase().includes(creatorSearchTerm.toLowerCase())
+    );
+  }, [selectedTech, creatorSearchTerm]);
 
   const getHeader = () => {
     switch (view) {
@@ -146,6 +159,18 @@ export default function CoursesPage() {
             />
           </div>
         )}
+        {view === 'creators' && (
+          <div className="relative ml-auto w-full max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search creators..."
+              className="w-full appearance-none bg-background pl-8 shadow-none"
+              value={creatorSearchTerm}
+              onChange={(e) => setCreatorSearchTerm(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {view === 'technologies' && (
@@ -178,7 +203,7 @@ export default function CoursesPage() {
 
       {view === 'creators' && selectedTech && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {selectedTech.creators.length > 0 ? selectedTech.creators.map(creator => (
+            {filteredCreators.length > 0 ? filteredCreators.map(creator => (
                 <Card 
                     key={creator.id}
                     onClick={() => handleCreatorClick(creator)}
@@ -192,7 +217,7 @@ export default function CoursesPage() {
                 </Card>
             )) : (
                  <div className="col-span-full text-center text-muted-foreground py-12">
-                    <p>No creators have been added for this technology yet.</p>
+                    <p>No creators found matching your search.</p>
                 </div>
             )}
         </div>
@@ -253,7 +278,7 @@ export default function CoursesPage() {
                                 <Button size="sm">
                                     <PlayCircle className="mr-2 h-4 w-4" />
                                     Watch Now
-                                </Button>
+                                 </Button>
                             </DialogTrigger>
                         </div>
                     </Card>

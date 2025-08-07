@@ -43,7 +43,6 @@ export default function Header() {
     { href: '/', text: 'Features' },
     { href: '/', text: 'Contact' },
     { href: '/', text: 'Contribute' },
-    { href: '/', text: 'FAQ' },
   ];
 
   if (pathname === '/') {

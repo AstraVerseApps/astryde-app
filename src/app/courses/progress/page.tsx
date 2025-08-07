@@ -60,7 +60,9 @@ export default function ProgressPage() {
   };
 
   const handleTechClick = (tech: Technology) => {
-    setSelectedTech(tech);
+    // We need to use the full tech object from the original `technologies` array
+    const fullTech = technologies.find(t => t.id === tech.id);
+    setSelectedTech(fullTech || tech);
     setView('creators');
   }
 
@@ -94,7 +96,7 @@ export default function ProgressPage() {
       case 'videos':
         return {
           title: `Continuing with ${selectedCreator?.name}`,
-          description: `Your "In Progress" videos from ${selectedCreator?.name} on ${selectedTech?.name}.`
+          description: `All videos from ${selectedCreator?.name} on ${selectedTech?.name}.`
         };
       default:
         return { title: '', description: '' };
@@ -170,9 +172,16 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {view === 'videos' && selectedCreator && selectedTech && (
+      {view === 'videos' && selectedCreator && selectedTech && (() => {
+        // Find the full creator object from the original `technologies` state
+        // to ensure we have all videos, not just the filtered "In Progress" ones.
+        const fullCreator = technologies
+            .find(t => t.id === selectedTech.id)
+            ?.creators.find(c => c.id === selectedCreator.id);
+        
+        return (
           <div className="space-y-4">
-            {selectedCreator.videos.length > 0 ? selectedCreator.videos.map(video => (
+            {fullCreator && fullCreator.videos.length > 0 ? fullCreator.videos.map(video => (
                 <Dialog key={video.id}>
                     <Card className={cn(
                         "flex flex-col md:flex-row items-center justify-between p-4 group transition-all",
@@ -222,11 +231,11 @@ export default function ProgressPage() {
                 </Dialog>
             )) : (
                  <div className="text-center text-muted-foreground py-12">
-                    <p>No videos in progress for this creator.</p>
+                    <p>No videos available for this creator.</p>
                 </div>
             )}
             </div>
-      )}
+      )})}
     </>
   );
 }

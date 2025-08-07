@@ -43,6 +43,11 @@ export default function Header() {
     { href: '/', text: 'Contribute' },
   ];
 
+  // Don't render the header on the courses pages, as it has its own layout
+  const isCoursesPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/courses');
+  if (isCoursesPage) return null;
+
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">

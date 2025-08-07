@@ -3,7 +3,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check, Compass, Target, TrendingUp, Users } from 'lucide-react';
+import { Check, Compass, Target, TrendingUp, Users, MessageSquarePlus } from 'lucide-react';
 import Link from 'next/link';
 
 const features = [
@@ -23,9 +23,9 @@ const features = [
     description: 'Stay motivated with learning streaks and earn achievement badges for mastering technologies and completing all videos from your favorite creators.',
   },
   {
-    icon: <Users className="w-8 h-8 text-primary" />,
-    title: 'Community of Learners',
-    description: 'You are not alone on this journey. Join a growing community of learners, discover new creators, and share your progress.',
+    icon: <MessageSquarePlus className="w-8 h-8 text-primary" />,
+    title: 'Contribute Content',
+    description: 'Have a favorite creator or a topic you want to learn? Suggest new video playlists through our contact page to help expand the learning galaxy.',
   },
 ];
 
@@ -37,10 +37,10 @@ export default function AboutPage() {
         <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern opacity-20"></div>
         <div className="container relative z-10">
           <h1 className="text-4xl md:text-6xl font-bold font-headline">
-            Navigate Your Learning Galaxy
+            Your Co-Pilot in the Tech Galaxy
           </h1>
           <p className="mt-4 text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
-            Astryde is more than a platform; it's your co-pilot for mastering technology. We curate the best video content into clear, actionable learning paths, so you can focus on what matters most: building your skills.
+            Astryde is more than a platform; it's your guide for mastering technology. We curate the best video content into clear, actionable learning paths, so you can focus on what matters most: building your skills.
           </p>
         </div>
       </section>

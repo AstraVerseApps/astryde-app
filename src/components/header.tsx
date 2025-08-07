@@ -12,6 +12,7 @@ import { ThemeToggle } from './theme-toggle';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup, DropdownMenuItem } from './ui/dropdown-menu';
 import { User as UserIcon, Settings, LogOut } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -26,6 +27,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function Header() {
   const { user, signInWithGoogle, logout, loading } = useUser();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     await logout();
@@ -44,9 +46,9 @@ export default function Header() {
   ];
 
   // Don't render the header on the courses pages, as it has its own layout
-  const isCoursesPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/courses');
-  if (isCoursesPage) return null;
-
+  if (pathname.startsWith('/courses')) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

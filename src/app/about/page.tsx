@@ -122,7 +122,7 @@ export default function AboutPage() {
         <div className="container text-center">
           <h2 className="text-3xl font-bold font-headline">Ready to Launch Your Learning?</h2>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            Your journey into the tech galaxy awaits. Sign in to start exploring, tracking your progress, and earning achievements.
+            Your journey into the tech galaxy awaits. Start exploring, tracking your progress, and earning achievements.
           </p>
           <Button asChild size="lg" className="mt-8">
             <Link href="/courses">Explore Courses</Link>

@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft } from 'lucide-react';
+import { Circle, CheckCircle2, PlayCircle, Clock, ArrowLeft, Search } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -12,6 +12,7 @@ import { useUser } from '@/context/UserContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 const getYouTubeEmbedUrl = (url: string) => {
     if (!url) return '';
@@ -39,6 +40,7 @@ export default function CoursesPage() {
   const [view, setView] = useState<'technologies' | 'creators' | 'videos'>('technologies');
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
@@ -66,6 +68,15 @@ export default function CoursesPage() {
       setSelectedTech(null);
     }
   }
+
+  const filteredTechnologies = useMemo(() => {
+    if (!searchTerm) {
+      return technologies;
+    }
+    return technologies.filter(tech =>
+      tech.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [technologies, searchTerm]);
 
   const getHeader = () => {
     switch (view) {
@@ -119,15 +130,27 @@ export default function CoursesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
-        <div>
+        <div className="flex-grow">
             <h1 className="text-lg font-semibold md:text-2xl font-headline">{title}</h1>
             <p className="text-sm text-muted-foreground">{description}</p>
         </div>
+        {view === 'technologies' && (
+          <div className="relative ml-auto w-full max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search technologies..."
+              className="w-full appearance-none bg-background pl-8 shadow-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {view === 'technologies' && (
          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {technologies.length > 0 ? technologies.map((tech, index) => {
+            {filteredTechnologies.length > 0 ? filteredTechnologies.map((tech, index) => {
               const colorVar = cardColors[index % cardColors.length];
               return (
                 <Card 
@@ -146,8 +169,8 @@ export default function CoursesPage() {
                 </Card>
             )}) : (
                 <div className="col-span-full text-center text-muted-foreground py-12">
+                    <p>No technologies found matching your search.</p>
                     <p>Your learning galaxy is waiting to be explored.</p>
-                    <p>No technologies have been added yet.</p>
                 </div>
             )}
         </div>
@@ -260,5 +283,3 @@ export default function CoursesPage() {
     </>
   );
 }
-
-    

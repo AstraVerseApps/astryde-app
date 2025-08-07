@@ -7,6 +7,7 @@ import { useUser } from '@/context/UserContext';
 import { useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
 import { BrainCircuit, Code, Dna, Bot, Atom, Rocket, Database, Binary, Network, Workflow, Sparkles } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -79,7 +80,7 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen w-full bg-background bg-gradient-to-br from-background via-secondary/50 to-background">
        <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern opacity-30"></div>
-       <div className="relative min-h-screen w-full flex items-center justify-center p-4">
+       <div className="relative min-h-screen w-full flex flex-col items-center justify-center p-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 items-center gap-16 max-w-6xl w-full">
             <div className="flex flex-col items-start text-left">
                 <AstrydeLogo />
@@ -98,6 +99,35 @@ export default function LoginPage() {
             <div className="hidden lg:flex items-center justify-center">
                 <TechCarousel />
             </div>
+        </div>
+        <div className="max-w-6xl w-full mt-24">
+            <h2 className="text-3xl font-bold text-center mb-8 font-headline">Frequently Asked Questions</h2>
+            <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="item-1">
+                    <AccordionTrigger>What is Astryde?</AccordionTrigger>
+                    <AccordionContent>
+                    Astryde is a learning platform designed to help you master technology skills through curated video content from the best creators. It's your personal guide through the vast universe of tech knowledge.
+                    </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="item-2">
+                    <AccordionTrigger>Is Astryde free to use?</AccordionTrigger>
+                    <AccordionContent>
+                    Yes, the core features of Astryde, including access to all learning paths and progress tracking, are completely free. We may introduce premium features in the future.
+                    </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="item-3">
+                    <AccordionTrigger>How is the content organized?</AccordionTrigger>
+                    <AccordionContent>
+                    Content is structured into Technologies, Creators, and Videos. You can explore a technology (like "Web Development"), then choose a creator who specializes in that area, and finally watch their videos in a structured sequence.
+                    </AccordionContent>
+                </AccordionItem>
+                 <AccordionItem value="item-4">
+                    <AccordionTrigger>Can I suggest new content or creators?</AccordionTrigger>
+                    <AccordionContent>
+                    Absolutely! We are always looking to expand our learning galaxy. You can use the "Contribute" link in the header to get in touch with us about new content suggestions.
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
         </div>
        </div>
        <style jsx>{`

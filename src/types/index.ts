@@ -11,6 +11,7 @@ export type Video = {
   creator?: string;
   technology?: string;
   createdAt?: Timestamp;
+  completedAt?: Timestamp;
 };
 
 export type Creator = {
@@ -18,6 +19,7 @@ export type Creator = {
   name: string;
   avatar: string;
   videos: Video[];
+  isStarred?: boolean;
 };
 
 export type Technology = {

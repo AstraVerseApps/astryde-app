@@ -32,6 +32,7 @@ interface UserContextType {
   deleteCreator: (techId: string, creatorId: string) => Promise<void>;
   deleteVideo: (techId: string, creatorId: string, videoId: string) => Promise<void>;
   addBulkData: (data: BulkDataItem[], onProgress: (progress: number) => void) => Promise<void>;
+  toggleCreatorStar: (techId: string, creatorId: string) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -42,6 +43,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
+  const [starredCreators, setStarredCreators] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -51,6 +53,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
       } else {
         setIsAdmin(false);
+        setStarredCreators({}); // Clear starred creators on logout
       }
       setAuthLoading(false);
     });
@@ -58,68 +61,98 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (!user) {
-        setTechnologies([]);
-        setDataLoading(false);
-        return;
-    }
+    let unsubscribes: Unsubscribe[] = [];
 
-    setDataLoading(true);
-
-    let rawTechnologies: Technology[] = [];
-    const unsubscribes: Unsubscribe[] = [];
-
-    const techQuery = query(collection(db, 'technologies'));
-    const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-        rawTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
-            const techData = { id: techDoc.id, ...techDoc.data() } as Technology;
-            
-            const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
-            const creatorsSnapshot = await getDocs(creatorsQuery);
-            techData.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
-                const creatorData = { id: creatorDoc.id, ...creatorDoc.data() } as Creator;
+    const fetchPublicData = () => {
+        setDataLoading(true);
+        const techQuery = query(collection(db, 'technologies'));
+        const techUnsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
+            const publicTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+                const techData = { id: techDoc.id, ...techDoc.data(), creators: [] } as Technology;
                 
-                const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
-                const videosSnapshot = await getDocs(videosQuery);
-                creatorData.videos = videosSnapshot.docs.map(videoDoc => ({
-                    id: videoDoc.id,
-                    ...videoDoc.data(),
-                    status: 'Not Started'
-                } as Video));
-                return creatorData;
+                const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`));
+                const creatorsSnapshot = await getDocs(creatorsQuery);
+                techData.creators = await Promise.all(creatorsSnapshot.docs.map(async (creatorDoc) => {
+                    const creatorData = { id: creatorDoc.id, ...creatorDoc.data(), videos: [] } as Creator;
+                    
+                    const videosQuery = query(collection(db, `technologies/${techDoc.id}/creators/${creatorDoc.id}/videos`), orderBy("createdAt", "asc"));
+                    const videosSnapshot = await getDocs(videosQuery);
+                    creatorData.videos = videosSnapshot.docs.map(videoDoc => {
+                        const videoData = videoDoc.data();
+                        return {
+                            id: videoDoc.id,
+                            ...videoData,
+                            status: 'Not Started',
+                            completedAt: videoData.completedAt,
+                        } as Video;
+                    });
+                    return creatorData;
+                }));
+                return techData;
             }));
-            return techData;
-        }));
-        
-        // After fetching all tech, connect statuses
-        connectStatuses();
-    });
-    unsubscribes.push(techUnsubscribe);
 
-    const connectStatuses = () => {
+            if (user) {
+                // If user is logged in, fetch their data and then merge
+                fetchAndMergeUserData(publicTechnologies);
+            } else {
+                // If no user, just set the public data
+                setTechnologies(publicTechnologies);
+                setDataLoading(false);
+            }
+        });
+        unsubscribes.push(techUnsubscribe);
+    };
+
+    const fetchAndMergeUserData = (publicTechnologies: Technology[]) => {
+        if (!user) return;
+        
         const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
         const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
-            const statuses: Record<string, Video['status']> = {};
+            const statuses: Record<string, { status: Video['status'], completedAt?: Timestamp }> = {};
             statusSnapshot.forEach((doc) => {
-                statuses[doc.id] = doc.data().status;
+                statuses[doc.id] = {
+                    status: doc.data().status,
+                    completedAt: doc.data().completedAt,
+                };
             });
 
-            // Create a deep copy to ensure re-render
-            const newTechnologies = JSON.parse(JSON.stringify(rawTechnologies)) as Technology[];
+            const newTechnologies = publicTechnologies.map(tech => ({
+                ...tech,
+                creators: tech.creators.map(creator => ({
+                    ...creator,
+                    videos: creator.videos.map(video => ({
+                        ...video,
+                        status: statuses[video.id]?.status || 'Not Started',
+                        completedAt: statuses[video.id]?.completedAt,
+                    }))
+                }))
+            }));
             
-            newTechnologies.forEach(tech => {
-                tech.creators.forEach(creator => {
-                    creator.videos.forEach(video => {
-                        video.status = statuses[video.id] || 'Not Started';
-                    });
-                });
+            // This is where starred creators listener should also be
+            const starredQuery = query(collection(db, `users/${user.uid}/starredCreators`));
+            const starredUnsubscribe = onSnapshot(starredQuery, (snapshot) => {
+                const newStarred: Record<string, boolean> = {};
+                snapshot.forEach(doc => { newStarred[doc.id] = true; });
+                setStarredCreators(newStarred);
+
+                // Now combine starred status into the final object
+                const finalTechnologies = newTechnologies.map(tech => ({
+                    ...tech,
+                    creators: tech.creators.map(creator => ({
+                        ...creator,
+                        isStarred: !!newStarred[`${tech.id}_${creator.id}`]
+                    }))
+                }));
+
+                setTechnologies(finalTechnologies);
+                setDataLoading(false);
             });
-            
-            setTechnologies(newTechnologies);
-            setDataLoading(false);
+            unsubscribes.push(starredUnsubscribe);
         });
         unsubscribes.push(statusUnsubscribe);
     };
+
+    fetchPublicData();
 
     return () => {
         unsubscribes.forEach(unsub => unsub());
@@ -148,26 +181,35 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
     const userStatusesRef = doc(db, `users/${user.uid}/videoStatuses`, videoId);
     try {
-        await setDoc(userStatusesRef, { status, techId, creatorId }, { merge: true });
-        
-        // Optimistically update the local state to provide immediate UI feedback
-        setTechnologies(currentTechnologies => {
-          const newTechnologies = JSON.parse(JSON.stringify(currentTechnologies));
-          const tech = newTechnologies.find((t: Technology) => t.id === techId);
-          if (tech) {
-            const creator = tech.creators.find((c: Creator) => c.id === creatorId);
-            if (creator) {
-              const video = creator.videos.find((v: Video) => v.id === videoId);
-              if (video) {
-                video.status = status;
-              }
-            }
-          }
-          return newTechnologies;
-        });
+        const dataToSet: { status: string; techId: string; creatorId: string; completedAt?: Timestamp } = { 
+            status,
+            techId,
+            creatorId 
+        };
+        if (status === 'Completed') {
+            dataToSet.completedAt = Timestamp.now();
+        }
 
+        await setDoc(userStatusesRef, dataToSet, { merge: true });
     } catch (e) {
         console.error("Failed to update status: ", e);
+    }
+  };
+
+  const toggleCreatorStar = async (techId: string, creatorId: string) => {
+    if (!user) return;
+    const starId = `${techId}_${creatorId}`;
+    const starRef = doc(db, `users/${user.uid}/starredCreators`, starId);
+    const isCurrentlyStarred = !!starredCreators[starId];
+
+    try {
+      if (isCurrentlyStarred) {
+        await deleteDoc(starRef);
+      } else {
+        await setDoc(starRef, { starredAt: serverTimestamp() });
+      }
+    } catch (error) {
+        console.error("Failed to toggle star:", error);
     }
   };
 
@@ -326,7 +368,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         deleteTechnology,
         deleteCreator,
         deleteVideo,
-        addBulkData
+        addBulkData,
+        toggleCreatorStar
     }}>
       {children}
     </UserContext.Provider>
@@ -340,5 +383,3 @@ export const useUser = () => {
   }
   return context;
 };
-
-    

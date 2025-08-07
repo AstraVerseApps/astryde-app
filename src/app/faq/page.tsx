@@ -55,10 +55,6 @@ const faqs = [
         answer: "Our initial content is curated to provide high-quality learning paths. However, the platform is built to grow based on user suggestions. We review all submissions to ensure they are high-quality and relevant."
     },
     {
-        question: "What is the 'Admin Panel'?",
-        answer: "The Admin Panel is a special section for verified creators and administrators to manage the platform's content. It allows them to add new technologies, creators, and videos, including a bulk upload feature."
-    },
-    {
         question: "How can I become a verified creator?",
         answer: "Currently, creator verification is handled internally. If you are a content creator and would like to have your playlists featured, please get in touch with us through the 'Contact Us' page to discuss the opportunity."
     },

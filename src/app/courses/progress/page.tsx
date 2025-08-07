@@ -39,16 +39,17 @@ export default function ProgressPage() {
   const [selectedTech, setSelectedTech] = useState<Technology | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
 
-  const inProgressTechnologies = useMemo(() => {
+  const technologiesWithProgress = useMemo(() => {
     return technologies
       .map(tech => ({
         ...tech,
         creators: tech.creators
           .map(creator => ({
             ...creator,
-            videos: creator.videos.filter(video => video.status === 'In Progress'),
+            // Keep all videos, but check if there's any progress
+            hasProgress: creator.videos.some(video => video.status === 'In Progress' || video.status === 'Completed'),
           }))
-          .filter(creator => creator.videos.length > 0),
+          .filter(creator => creator.hasProgress), // Keep creators that have any progress
       }))
       .filter(tech => tech.creators.length > 0);
   }, [technologies]);
@@ -60,7 +61,6 @@ export default function ProgressPage() {
   };
 
   const handleTechClick = (tech: Technology) => {
-    // We need to use the full tech object from the original `technologies` array
     const fullTech = technologies.find(t => t.id === tech.id);
     setSelectedTech(fullTech || tech);
     setView('creators');
@@ -86,11 +86,11 @@ export default function ProgressPage() {
       case 'technologies':
         return {
           title: 'Your Learning Progress',
-          description: 'A focused view of technologies where you have videos in progress.'
+          description: 'A focused view of all technologies you have started or completed.'
         };
       case 'creators':
         return {
-          title: `In Progress with ${selectedTech?.name}`,
+          title: `Progress in ${selectedTech?.name}`,
           description: 'Creators you are actively learning from for this technology.'
         };
       case 'videos':
@@ -127,8 +127,13 @@ export default function ProgressPage() {
 
       {view === 'technologies' && (
          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {inProgressTechnologies.length > 0 ? inProgressTechnologies.map((tech, index) => {
+            {technologiesWithProgress.length > 0 ? technologiesWithProgress.map((tech, index) => {
               const colorVar = cardColors[index % cardColors.length];
+              const creatorsWithProgressCount = tech.creators.length;
+              const videoProgressCount = tech.creators.reduce((acc, creator) => {
+                  return acc + creator.videos.filter(v => v.status !== 'Not Started').length;
+              }, 0);
+
               return (
                 <Card 
                     key={tech.id} 
@@ -141,7 +146,9 @@ export default function ProgressPage() {
                 >
                     <CardHeader>
                         <CardTitle>{tech.name}</CardTitle>
-                        <CardDescription>{tech.creators.length} creator(s) in progress</CardDescription>
+                        <CardDescription>
+                            {creatorsWithProgressCount} creator(s) and {videoProgressCount} video(s) with progress.
+                        </CardDescription>
                     </CardHeader>
                 </Card>
             )}) : (
@@ -155,26 +162,29 @@ export default function ProgressPage() {
 
       {view === 'creators' && selectedTech && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {selectedTech.creators.map(creator => (
-                <Card 
-                    key={creator.id}
-                    onClick={() => handleCreatorClick(creator)}
-                    className="flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all hover:shadow-primary/20 hover:shadow-lg hover:-translate-y-1"
-                >
-                    <Avatar className="w-24 h-24 mb-4 border-4 border-muted">
-                        <AvatarImage src={creator.avatar} />
-                        <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <h3 className="text-lg font-bold">{creator.name}</h3>
-                     <p className="text-sm text-muted-foreground">{creator.videos.length} video(s) in progress</p>
-                </Card>
-            ))}
+            {selectedTech.creators.map(creator => {
+                const videosWithProgress = creator.videos.filter(v => v.status !== 'Not Started').length;
+                if(videosWithProgress === 0) return null;
+                
+                return (
+                    <Card 
+                        key={creator.id}
+                        onClick={() => handleCreatorClick(creator)}
+                        className="flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all hover:shadow-primary/20 hover:shadow-lg hover:-translate-y-1"
+                    >
+                        <Avatar className="w-24 h-24 mb-4 border-4 border-muted">
+                            <AvatarImage src={creator.avatar} />
+                            <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <h3 className="text-lg font-bold">{creator.name}</h3>
+                        <p className="text-sm text-muted-foreground">{videosWithProgress} video(s) with progress</p>
+                    </Card>
+                )
+            })}
         </div>
       )}
 
       {view === 'videos' && selectedCreator && selectedTech && (() => {
-        // Find the full creator object from the original `technologies` state
-        // to ensure we have all videos, not just the filtered "In Progress" ones.
         const fullCreator = technologies
             .find(t => t.id === selectedTech.id)
             ?.creators.find(c => c.id === selectedCreator.id);

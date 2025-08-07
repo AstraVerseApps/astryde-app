@@ -39,24 +39,6 @@ const features = [
   },
 ];
 
-const adminFeatures = [
-    {
-        icon: <Shield className="w-10 h-10 text-primary" />,
-        title: 'Admin Control Panel',
-        description: 'Verified creators have access to a powerful admin panel to manage all learning content on the platform.',
-    },
-     {
-        icon: <MessageSquarePlus className="w-10 h-10 text-primary" />,
-        title: 'Full Content Management',
-        description: 'Admins can easily add, edit, or remove technologies, creators, and individual videos to keep the content fresh and relevant.',
-    },
-    {
-        icon: <Bot className="w-10 h-10 text-primary" />,
-        title: 'AI-Powered Bulk Upload',
-        description: 'Save time by uploading an Excel file with video details. Our system intelligently processes the file to add multiple videos at once.',
-    },
-]
-
 export default function FeaturesPage() {
   return (
     <div className="bg-background text-foreground">
@@ -88,23 +70,6 @@ export default function FeaturesPage() {
           </div>
         </div>
       </section>
-
-        {/* Admin Features */}
-      <section className="py-16 md:py-24 bg-muted/30">
-        <div className="container">
-          <h2 className="text-3xl font-bold text-center font-headline mb-12">Exclusive Tools for Creators</h2>
-           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {adminFeatures.map((feature) => (
-              <Card key={feature.title} className="text-center p-6">
-                 <div className="flex justify-center mb-4">{feature.icon}</div>
-                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
 
       {/* CTA Section */}
       <section className="py-16 md:py-24 bg-primary/5">

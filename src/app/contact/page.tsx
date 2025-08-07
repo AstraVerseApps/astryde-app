@@ -9,12 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Send } from 'lucide-react';
-import Link from 'next/link';
 
 export default function ContactPage() {
   const [inquiryType, setInquiryType] = useState('query');
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
+  const [playlistUrl, setPlaylistUrl] = useState('');
+  const [optionalMessage, setOptionalMessage] = useState('');
+
 
   const getSubject = () => {
     switch (inquiryType) {
@@ -32,7 +34,10 @@ export default function ContactPage() {
   const getBody = () => {
     let bodyContent = '';
     if (inquiryType === 'playlist') {
-        bodyContent = `Playlist URL: ${message}`;
+        bodyContent = `Playlist URL: ${playlistUrl}`;
+        if (optionalMessage) {
+            bodyContent += `\n\nMessage: \n${optionalMessage}`;
+        }
     } else {
         bodyContent = `Message: \n${message}`;
     }
@@ -48,7 +53,7 @@ export default function ContactPage() {
                 Get In Touch
             </h1>
             <p className="mt-4 text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
-                Have a question, a feature idea, or a new course playlist to share? We'd love to hear from you.
+                Have a question, a feature idea, or a new course that you want to explore and track? We would love to hear from you and the team will get back once the course track is added.
             </p>
             </div>
         </section>
@@ -75,18 +80,31 @@ export default function ContactPage() {
                             </Select>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="message">
-                                {inquiryType === 'playlist' ? 'Playlist URL' : 'Your Message'}
-                            </Label>
-                            {inquiryType === 'playlist' ? (
-                                <Input 
-                                    id="message" 
-                                    placeholder="https://youtube.com/playlist?list=..."
-                                    value={message}
-                                    onChange={(e) => setMessage(e.target.value)}
-                                />
-                            ) : (
+                        {inquiryType === 'playlist' ? (
+                            <>
+                                <div className="space-y-2">
+                                    <Label htmlFor="playlist-url">Playlist URL</Label>
+                                    <Input 
+                                        id="playlist-url" 
+                                        placeholder="https://youtube.com/playlist?list=..."
+                                        value={playlistUrl}
+                                        onChange={(e) => setPlaylistUrl(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="optional-message">Optional Message</Label>
+                                    <Textarea 
+                                        id="optional-message" 
+                                        placeholder="Add any extra details here..." 
+                                        rows={4}
+                                        value={optionalMessage}
+                                        onChange={(e) => setOptionalMessage(e.target.value)}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                             <div className="space-y-2">
+                                <Label htmlFor="message">Your Message</Label>
                                 <Textarea 
                                     id="message" 
                                     placeholder="Please describe your query or feature request in detail..." 
@@ -94,8 +112,8 @@ export default function ContactPage() {
                                     value={message}
                                     onChange={(e) => setMessage(e.target.value)}
                                 />
-                            )}
-                        </div>
+                            </div>
+                        )}
 
                          <div className="space-y-2">
                             <Label htmlFor="email">Your Email Address</Label>

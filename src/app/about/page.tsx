@@ -1,7 +1,6 @@
 
 'use client';
 
-import { AstrydeLogo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Compass, Target, TrendingUp, Users } from 'lucide-react';
@@ -37,16 +36,12 @@ export default function AboutPage() {
       <section className="relative py-20 md:py-32 text-center bg-muted/30">
         <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern opacity-20"></div>
         <div className="container relative z-10">
-          <AstrydeLogo />
-          <h1 className="text-4xl md:text-6xl font-bold font-headline mt-6">
+          <h1 className="text-4xl md:text-6xl font-bold font-headline">
             Navigate Your Learning Galaxy
           </h1>
           <p className="mt-4 text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
             Astryde is more than a platform; it's your co-pilot for mastering technology. We curate the best video content into clear, actionable learning paths, so you can focus on what matters most: building your skills.
           </p>
-          <Button asChild size="lg" className="mt-8">
-            <Link href="/courses">Start Your Journey</Link>
-          </Button>
         </div>
       </section>
 
@@ -130,7 +125,7 @@ export default function AboutPage() {
             Your journey into the tech galaxy awaits. Sign in to start exploring, tracking your progress, and earning achievements.
           </p>
           <Button asChild size="lg" className="mt-8">
-            <Link href="/courses">Join the Astryde Mission</Link>
+            <Link href="/courses">Explore Courses</Link>
           </Button>
         </div>
       </section>

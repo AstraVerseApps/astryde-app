@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Clock, ArrowLeft, PlayCircle } from 'lucide-react';
+import { Clock, ArrowLeft, PlayCircle, Star } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import type { Video, Technology, Creator } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -46,13 +46,17 @@ export default function ProgressPage() {
         creators: tech.creators
           .map(creator => ({
             ...creator,
-            // Keep all videos, but check if there's any progress
+            // A creator has progress if they have at least one video started/completed
+            // AND not all of their videos are completed.
             hasProgress: creator.videos.some(video => video.status === 'In Progress' || video.status === 'Completed'),
+            allCompleted: creator.videos.every(video => video.status === 'Completed'),
           }))
-          .filter(creator => creator.hasProgress), // Keep creators that have any progress
+          // Show starred creators OR creators with active (not fully completed) progress.
+          .filter(creator => creator.isStarred || (creator.hasProgress && !creator.allCompleted)),
       }))
       .filter(tech => tech.creators.length > 0);
   }, [technologies]);
+
 
   const handleStatusChange = (videoId: string, status: Video['status']) => {
     if (selectedTech && selectedCreator) {
@@ -86,12 +90,12 @@ export default function ProgressPage() {
       case 'technologies':
         return {
           title: 'Your Learning Progress',
-          description: 'A focused view of all technologies you have started or completed.'
+          description: 'A focused view of all technologies you have started, completed, or starred.'
         };
       case 'creators':
         return {
           title: `Progress in ${selectedTech?.name}`,
-          description: 'Creators you are actively learning from for this technology.'
+          description: 'Creators you are actively learning from or have starred for this technology.'
         };
       case 'videos':
         return {
@@ -154,7 +158,7 @@ export default function ProgressPage() {
             )}) : (
                 <div className="col-span-full text-center text-muted-foreground py-12">
                     <p>No courses in progress.</p>
-                    <p>Go to the main 'Courses' page to start learning!</p>
+                    <p>Go to the main 'Courses' page to start learning or star a creator!</p>
                 </div>
             )}
         </div>
@@ -164,7 +168,7 @@ export default function ProgressPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {selectedTech.creators.map(creator => {
                 const videosWithProgress = creator.videos.filter(v => v.status !== 'Not Started').length;
-                if(videosWithProgress === 0) return null;
+                if(videosWithProgress === 0 && !creator.isStarred) return null;
                 
                 return (
                     <Card 
@@ -172,12 +176,17 @@ export default function ProgressPage() {
                         onClick={() => handleCreatorClick(creator)}
                         className="flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all hover:shadow-primary/20 hover:shadow-lg hover:-translate-y-1"
                     >
+                         {creator.isStarred && (
+                            <div className="absolute top-3 right-3 text-yellow-400">
+                                <Star className="h-5 w-5 fill-current" />
+                            </div>
+                        )}
                         <Avatar className="w-24 h-24 mb-4 border-4 border-muted">
                             <AvatarImage src={creator.avatar} />
                             <AvatarFallback>{creator.name.charAt(0)}</AvatarFallback>
                         </Avatar>
                         <h3 className="text-lg font-bold">{creator.name}</h3>
-                        <p className="text-sm text-muted-foreground">{videosWithProgress} video(s) with progress</p>
+                        <p className="text-sm text-muted-foreground">{creator.isStarred ? "Starred" : `${videosWithProgress} video(s) with progress`}</p>
                     </Card>
                 )
             })}
@@ -249,3 +258,4 @@ export default function ProgressPage() {
     </>
   );
 }
+

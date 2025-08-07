@@ -43,36 +43,14 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [starredCreators, setStarredCreators] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setLoading(true);
-    let unsubscribe: Unsubscribe | null = null;
   
-    const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-        setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
-      } else {
-        setIsAdmin(false);
-        setStarredCreators({});
-      }
-      setLoading(false);
-    });
+  const [publicTechnologies, setPublicTechnologies] = useState<Technology[]>([]);
   
-    return () => {
-      authUnsubscribe();
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, []);
-
   useEffect(() => {
-    // This effect fetches all public course data.
+    // This effect fetches all public course data once.
     const techQuery = query(collection(db, 'technologies'), orderBy('name'));
     const unsubscribe = onSnapshot(techQuery, async (techSnapshot) => {
-        const publicTechnologies = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
+        const technologiesData = await Promise.all(techSnapshot.docs.map(async (techDoc) => {
             const techData = { id: techDoc.id, ...techDoc.data(), creators: [] } as Technology;
             
             const creatorsQuery = query(collection(db, `technologies/${techDoc.id}/creators`), orderBy('name'));
@@ -96,9 +74,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             return techData;
         }));
         
-        // Temporarily set the public data. If a user is logged in, it will be updated with their progress.
-        setTechnologies(publicTechnologies);
-        setDataLoading(false);
+        setPublicTechnologies(technologiesData);
+        setTechnologies(technologiesData); 
+        setLoading(false);
     });
 
     return () => unsubscribe();
@@ -106,10 +84,22 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
 
   useEffect(() => {
-    // This effect merges user-specific data if a user is logged in.
+    const authUnsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+       if (currentUser) {
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        setIsAdmin(!!(adminEmail && currentUser.email === adminEmail));
+      } else {
+        setIsAdmin(false);
+      }
+    });
+    return () => authUnsubscribe();
+  }, []);
+
+  
+  useEffect(() => {
     if (!user) {
-        // If user logs out, we need to reset their progress in the state.
-        setTechnologies(prev => prev.map(tech => ({
+        setTechnologies(publicTechnologies.map(tech => ({
             ...tech,
             creators: tech.creators.map(creator => ({
                 ...creator,
@@ -122,11 +112,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             }))
         })));
         setStarredCreators({});
+        setLoading(false);
         return;
     }
-
-    setDataLoading(true);
-
+  
+    setLoading(true);
+    
     const statusQuery = query(collection(db, `users/${user.uid}/videoStatuses`));
     const statusUnsubscribe = onSnapshot(statusQuery, (statusSnapshot) => {
         const statuses: Record<string, { status: Video['status'], completedAt?: Timestamp }> = {};
@@ -143,8 +134,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             snapshot.forEach(doc => { newStarred[doc.id] = true; });
             setStarredCreators(newStarred);
 
-            // Merge all user data with the existing public technology data
-            setTechnologies(prev => prev.map(tech => ({
+            setTechnologies(publicTechnologies.map(tech => ({
                 ...tech,
                 creators: tech.creators.map(creator => ({
                     ...creator,
@@ -156,17 +146,18 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
                     }))
                 }))
             })));
-            setDataLoading(false);
+            setLoading(false);
         });
 
-        // Return cleanup for starred creators listener
         return () => starredUnsubscribe();
+    }, (error) => {
+      console.error("Error in status listener:", error);
+      setLoading(false);
     });
 
-    // Return cleanup for video status listener
     return () => statusUnsubscribe();
 
-}, [user]);
+  }, [user, publicTechnologies]);
 
 
   const signInWithGoogle = async () => {
@@ -194,10 +185,11 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
             status,
             techId,
             creatorId,
-            completedAt: null
         };
         if (status === 'Completed') {
             dataToSet.completedAt = Timestamp.now();
+        } else {
+            dataToSet.completedAt = null;
         }
 
         await setDoc(userStatusesRef, dataToSet, { merge: true });
